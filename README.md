@@ -39,6 +39,22 @@ npm run export:web
 
 Exportul web verifică bundling-ul pentru browser. Compatibilitatea iOS/Android este susținută de componente React Native comune; rularea efectivă pe simulatoare/dispozitive necesită mediile native respective și un backend configurat.
 
+## Deploy web pe Vercel
+
+Repository-ul include `vercel.json`, care exportă aplicația în `dist` și rescrie toate rutele către aplicația SPA. Astfel, rutele Expo Router funcționează și la acces direct sau refresh.
+
+1. Importă repository-ul ca proiect separat în Vercel.
+2. Păstrează configurația citită din `vercel.json` (`npm run export:web`, output `dist`).
+3. Configurează pentru Production și Preview:
+
+```text
+EXPO_PUBLIC_API_BASE_URL=https://<backend>.vercel.app/api
+```
+
+4. Deployează frontendul, apoi adaugă originea sa exactă în `CORS_ORIGINS` pe backend și redeployează backendul.
+
+Variabila `EXPO_PUBLIC_API_BASE_URL` este inclusă în bundle la build; orice schimbare necesită un nou deploy. Nu configura secretele backendului în proiectul frontend.
+
 ## Limitări PoC
 
 Nu există autentificare, căutare, filtre, hartă integrată, mod offline cu coadă de editări sau notificări. Aplicația nu conține date demonstrative și arată o stare goală cu reîncercare dacă backendul ori furnizorii nu sunt disponibili la prima încărcare.

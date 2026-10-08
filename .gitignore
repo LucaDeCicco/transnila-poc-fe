@@ -4,6 +4,7 @@ node_modules/
 # Expo and build output
 .expo/
 .expo-shared/
+.vercel/
 dist/
 web-build/
 expo-env.d.ts
@@ -46,4 +47,3 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
-
