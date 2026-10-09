@@ -19,6 +19,7 @@ export interface RefreshResponse {
   performed: boolean; success?: boolean; reason?: string; error?: string; nextAllowedAt?: string;
   retryAfter?: number; vehicle?: Vehicle; updated?: number; skipped?: unknown[]; failed?: unknown[];
 }
+export interface FleetRefreshStatus { lastSuccessAt: string | null }
 export interface AvailabilityMessageResponse {
   message: string;
   generatedAt: string;
