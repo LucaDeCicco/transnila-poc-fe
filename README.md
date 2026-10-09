@@ -25,6 +25,8 @@ După schimbarea `.env`, repornește Metro. Pentru telefon se poate porni cu `np
 
 La intrarea în listă sau în detalii, aplicația afișează întâi datele persistate și apoi trimite explicit un POST de verificare automată. Backendul decide dacă intervalul de 30 minute a expirat. Nu există polling sau refresh în fundal; un ecran rămas deschis nu se actualizează singur. Actualizarea manuală afișează rezultatele parțiale și momentul următor permis de cooldown.
 
+Ecranul principal conține și un mesaj de disponibilitate pregătit pentru WhatsApp. Vehiculele active marcate `AVAILABLE` sunt grupate după model, fără diferență între litere mari și mici. Butonul dedicat actualizează flota fără cooldown, regenerează mesajul și păstrează duplicatele de locație; butonul de copiere păstrează marcajele `*` folosite de WhatsApp pentru bold.
+
 Editarea păstrează local valorile nesalvate când se schimbă datele GPS. Șirurile golite sunt trimise backendului și normalizate la `null`. Tahograful are trei stări distincte. Toate momentele sunt afișate explicit în `Europe/Bucharest`.
 
 Adresele sunt furnizate prin Geoapify și datele cartografice OpenStreetMap; atribuirea este afișată în secțiunea locației. Butonul Google Maps folosește numai coordonatele GPS valide.

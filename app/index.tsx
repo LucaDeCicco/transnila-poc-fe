@@ -3,8 +3,9 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, useWindowDime
 import { useFocusEffect, useRouter } from 'expo-router';
 import { api } from '@/lib/api';
 import { availability, unspecified } from '@/lib/format';
-import { Vehicle } from '@/types/vehicle';
+import { AvailabilityMessageResponse, Vehicle } from '@/types/vehicle';
 import { Button, colors, Message, styles as ui } from '@/components/ui';
+import { AvailabilityMessageCard } from '@/components/availability-message-card';
 
 export default function FleetScreen() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -12,6 +13,10 @@ export default function FleetScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const [availabilityMessage, setAvailabilityMessage] = useState<AvailabilityMessageResponse | null>(null);
+  const [messageLoading, setMessageLoading] = useState(true);
+  const [messageRefreshing, setMessageRefreshing] = useState(false);
+  const [messageError, setMessageError] = useState<string | null>(null);
   const activeRequest = useRef(false);
   const router = useRouter();
   const desktop = useWindowDimensions().width >= 760;
@@ -21,11 +26,17 @@ export default function FleetScreen() {
     activeRequest.current = true; setLoading(true); setError(null);
     try {
       const saved = await api.list(); setVehicles(saved); setLoading(false);
+      try {
+        setAvailabilityMessage(await api.availabilityMessage()); setMessageError(null);
+      } catch (e) {
+        setMessageError(e instanceof Error ? e.message : 'Mesajul nu poate fi încărcat.');
+      } finally { setMessageLoading(false); }
       const response = await api.autoFleet();
       if (response.performed && response.success === false) setError(response.error ?? 'Sincronizarea flotei a eșuat.');
-      setVehicles(await api.list());
+      const [nextVehicles, nextMessage] = await Promise.all([api.list(), api.availabilityMessage()]);
+      setVehicles(nextVehicles); setAvailabilityMessage(nextMessage); setMessageError(null);
     } catch (e) { setError(e instanceof Error ? e.message : 'Datele nu pot fi încărcate.'); }
-    finally { setLoading(false); activeRequest.current = false; }
+    finally { setLoading(false); setMessageLoading(false); activeRequest.current = false; }
   }, []);
   useFocusEffect(useCallback(() => { void enter(); return undefined; }, [enter]));
 
@@ -36,9 +47,25 @@ export default function FleetScreen() {
       if (!response.performed) setResult(response.nextAllowedAt ? `Actualizarea este disponibilă după ${new Date(response.nextAllowedAt).toLocaleString('ro-RO')}.` : 'Nicio mașină nu este eligibilă acum.');
       else if (!response.success) setError(response.error ?? 'Actualizarea flotei a eșuat.');
       else setResult(`Flotă actualizată: ${response.updated ?? 0}; omise: ${response.skipped?.length ?? 0}; erori: ${response.failed?.length ?? 0}.`);
-      setVehicles(await api.list());
+      const [nextVehicles, nextMessage] = await Promise.all([api.list(), api.availabilityMessage()]);
+      setVehicles(nextVehicles); setAvailabilityMessage(nextMessage); setMessageError(null);
     } catch (e) { setError(e instanceof Error ? e.message : 'Actualizarea a eșuat.'); }
     finally { setRefreshing(false); }
+  };
+
+  const refreshMessage = async () => {
+    if (messageRefreshing) return;
+    setMessageRefreshing(true); setMessageError(null);
+    try {
+      const response = await api.refreshAvailabilityMessage();
+      setAvailabilityMessage(response);
+      setVehicles(await api.list());
+      if (response.refresh?.performed && response.refresh.success === false) {
+        setMessageError(response.refresh.error ?? 'Sincronizarea flotei a eșuat; mesajul folosește ultimele date salvate.');
+      }
+    } catch (e) {
+      setMessageError(e instanceof Error ? e.message : 'Mesajul nu a putut fi actualizat.');
+    } finally { setMessageRefreshing(false); }
   };
 
   return <View style={ui.screen}><FlatList
@@ -48,6 +75,10 @@ export default function FleetScreen() {
       <Button title="Actualizează flota" onPress={manual} disabled={refreshing} />
       {error && <View style={{ width: '100%' }}><Message error>{error}</Message></View>}
       {result && <View style={{ width: '100%' }}><Message>{result}</Message></View>}
+      <View style={{ width: '100%' }}><AvailabilityMessageCard
+        data={availabilityMessage} loading={messageLoading} refreshing={messageRefreshing}
+        error={messageError} onRefresh={() => void refreshMessage()}
+      /></View>
       {desktop && vehicles.length > 0 && <View style={list.tableHeader}><Text style={list.colPlate}>Număr</Text><Text style={list.col}>Șofer</Text><Text style={list.col}>Disponibilitate</Text><Text style={list.col}>Locație</Text><Text style={list.col}>Destinație</Text></View>}
     </View>}
     renderItem={({ item }) => <Pressable onPress={() => router.push(`/vehicles/${item.id}`)} style={({ pressed }) => [list.card, desktop && list.desktopRow, pressed && { opacity: .7 }]}>
