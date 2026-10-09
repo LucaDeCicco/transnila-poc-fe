@@ -3,12 +3,15 @@ import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, Vi
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { api } from '@/lib/api';
 import { availability as availabilityText, availabilityLabels, bucharestDate, unspecified } from '@/lib/format';
+import { formatInternationalPhone, normalizeNationalPhone } from '@/lib/phone';
 import { Availability, Vehicle } from '@/types/vehicle';
 import { Button, colors, Field, Message, Row, Section, styles as ui } from '@/components/ui';
+import { CountryPhoneField } from '@/components/country-phone-field';
 
-type Form = { driverName: string; tachograph: 'null' | 'true' | 'false'; vehicleModel: string; vehicleDetails: string; availability: Availability | 'null'; destination: string };
+type Form = { driverName: string; phoneCountryIso: string; phoneNumber: string; tachograph: 'null' | 'true' | 'false'; vehicleModel: string; vehicleDetails: string; availability: Availability | 'null'; destination: string };
 const fromVehicle = (v: Vehicle): Form => ({
-  driverName: v.driverName ?? '', tachograph: v.hasTachograph === null ? 'null' : String(v.hasTachograph) as 'true' | 'false',
+  driverName: v.driverName ?? '', phoneCountryIso: v.driverPhoneCountryIso ?? 'RO', phoneNumber: v.driverPhoneNumber ?? '',
+  tachograph: v.hasTachograph === null ? 'null' : String(v.hasTachograph) as 'true' | 'false',
   vehicleModel: v.vehicleModel ?? '', vehicleDetails: v.vehicleDetails ?? '', availability: v.availability ?? 'null', destination: v.destination ?? ''
 });
 
@@ -43,8 +46,11 @@ export default function VehicleScreen() {
   const save = async () => {
     if (!vehicle || !form || saving) return; setSaving(true); setError(null);
     try {
+      const normalizedPhone = form.phoneNumber.trim() ? normalizeNationalPhone(form.phoneNumber, form.phoneCountryIso) : null;
+      if (form.phoneNumber.trim() && !normalizedPhone) throw new Error('Numărul de telefon nu este valid pentru țara selectată.');
       const next = await api.patch(vehicle.id, {
-        driverName: form.driverName, hasTachograph: form.tachograph === 'null' ? null : form.tachograph === 'true',
+        driverName: form.driverName, driverPhoneCountryIso: normalizedPhone ? form.phoneCountryIso : null, driverPhoneNumber: normalizedPhone,
+        hasTachograph: form.tachograph === 'null' ? null : form.tachograph === 'true',
         vehicleModel: form.vehicleModel, vehicleDetails: form.vehicleDetails,
         availability: form.availability === 'null' ? null : form.availability, destination: form.destination
       });
@@ -76,11 +82,19 @@ export default function VehicleScreen() {
       <Row label="Număr de înmatriculare" value={vehicle.registrationNumber} />
       {editing ? <>
         <Field label="Șofer" value={form.driverName} onChangeText={(driverName) => setForm({ ...form, driverName })} maxLength={120} />
+        <CountryPhoneField countryIso={form.phoneCountryIso} phoneNumber={form.phoneNumber}
+          onCountryChange={(phoneCountryIso) => setForm({ ...form, phoneCountryIso })}
+          onPhoneChange={(phoneNumber) => setForm({ ...form, phoneNumber })} />
         <Choice label="Tahograf" value={form.tachograph} options={[['null', 'Nespecificat'], ['true', 'Da'], ['false', 'Nu']]} onChange={(tachograph) => setForm({ ...form, tachograph: tachograph as Form['tachograph'] })} />
         <Field label="Model" value={form.vehicleModel} onChangeText={(vehicleModel) => setForm({ ...form, vehicleModel })} maxLength={120} />
         <Field label="Detaliile mașinii" multiline value={form.vehicleDetails} onChangeText={(vehicleDetails) => setForm({ ...form, vehicleDetails })} maxLength={4000} />
       </> : <>
-        <Row label="Șofer" value={unspecified(vehicle.driverName)} /><Row label="Tahograf" value={vehicle.hasTachograph === null ? 'Nespecificat' : vehicle.hasTachograph ? 'Da' : 'Nu'} />
+        <Row label="Șofer" value={unspecified(vehicle.driverName)} /><Row label="Telefon" value={formatInternationalPhone(vehicle.driverPhoneE164)} />
+        {vehicle.driverPhoneE164 && <View style={ui.actions}>
+          <Button title="Sună" onPress={() => void Linking.openURL(`tel:${vehicle.driverPhoneE164}`)} />
+          <Button secondary title="Deschide WhatsApp" onPress={() => void Linking.openURL(`https://wa.me/${vehicle.driverPhoneE164!.replace(/\D/g, '')}`)} />
+        </View>}
+        <Row label="Tahograf" value={vehicle.hasTachograph === null ? 'Nespecificat' : vehicle.hasTachograph ? 'Da' : 'Nu'} />
         <Row label="Model" value={unspecified(vehicle.vehicleModel)} /><Row label="Detaliile mașinii" value={unspecified(vehicle.vehicleDetails)} />
       </>}
     </Section>

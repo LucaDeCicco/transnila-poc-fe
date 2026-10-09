@@ -29,6 +29,8 @@ Ecranul principal conține și un mesaj de disponibilitate pregătit pentru What
 
 Editarea păstrează local valorile nesalvate când se schimbă datele GPS. Șirurile golite sunt trimise backendului și normalizate la `null`. Tahograful are trei stări distincte. Toate momentele sunt afișate explicit în `Europe/Bucharest`.
 
+Profilul mașinii permite selectarea țării și introducerea telefonului șoferului. Numărul este validat internațional, apare atât în lista responsive, cât și în detalii, și oferă acțiuni directe pentru apel și WhatsApp. Numărul nu este inclus în mesajul public de disponibilitate.
+
 Adresele sunt furnizate prin Geoapify și datele cartografice OpenStreetMap; atribuirea este afișată în secțiunea locației. Butonul Google Maps folosește numai coordonatele GPS valide.
 
 ## Verificări

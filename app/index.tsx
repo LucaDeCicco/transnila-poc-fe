@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, useWindowDime
 import { useFocusEffect, useRouter } from 'expo-router';
 import { api } from '@/lib/api';
 import { availability, unspecified } from '@/lib/format';
+import { formatInternationalPhone } from '@/lib/phone';
 import { AvailabilityMessageResponse, Vehicle } from '@/types/vehicle';
 import { Button, colors, Message, styles as ui } from '@/components/ui';
 import { AvailabilityMessageCard } from '@/components/availability-message-card';
@@ -19,7 +20,7 @@ export default function FleetScreen() {
   const [messageError, setMessageError] = useState<string | null>(null);
   const activeRequest = useRef(false);
   const router = useRouter();
-  const desktop = useWindowDimensions().width >= 760;
+  const desktop = useWindowDimensions().width >= 1000;
 
   const enter = useCallback(async () => {
     if (activeRequest.current) return;
@@ -79,12 +80,12 @@ export default function FleetScreen() {
         data={availabilityMessage} loading={messageLoading} refreshing={messageRefreshing}
         error={messageError} onRefresh={() => void refreshMessage()}
       /></View>
-      {desktop && vehicles.length > 0 && <View style={list.tableHeader}><Text style={list.colPlate}>Număr</Text><Text style={list.col}>Șofer</Text><Text style={list.col}>Disponibilitate</Text><Text style={list.col}>Locație</Text><Text style={list.col}>Destinație</Text></View>}
+      {desktop && vehicles.length > 0 && <View style={list.tableHeader}><Text style={list.colPlate}>Număr</Text><Text style={list.col}>Șofer</Text><Text style={list.colPhone}>Telefon</Text><Text style={list.col}>Disponibilitate</Text><Text style={list.col}>Locație</Text><Text style={list.col}>Destinație</Text></View>}
     </View>}
     renderItem={({ item }) => <Pressable onPress={() => router.push(`/vehicles/${item.id}`)} style={({ pressed }) => [list.card, desktop && list.desktopRow, pressed && { opacity: .7 }]}>
       <View style={list.colPlate}><Text style={list.plate}>{item.registrationNumber}</Text>{item.hasWarning && <Text accessibilityLabel="Avertizare actualizare" style={list.warning}>!</Text>}</View>
-      {desktop ? <><Text style={list.col}>{unspecified(item.driverName)}</Text><Text style={list.col}>{availability(item.availability)}</Text><Text style={list.col}>{[item.country, item.city].filter(Boolean).join(', ') || 'Nespecificat'}</Text><Text style={list.col}>{unspecified(item.destination)}</Text></> :
-      <View style={{ gap: 5 }}><Text style={list.primary}>{unspecified(item.driverName)} · {availability(item.availability)}</Text><Text style={list.secondary}>{[item.country, item.city].filter(Boolean).join(', ') || 'Nespecificat'}</Text><Text style={list.secondary}>Destinație: {unspecified(item.destination)}</Text></View>}
+      {desktop ? <><Text style={list.col}>{unspecified(item.driverName)}</Text><Text style={list.colPhone}>{formatInternationalPhone(item.driverPhoneE164)}</Text><Text style={list.col}>{availability(item.availability)}</Text><Text style={list.col}>{[item.country, item.city].filter(Boolean).join(', ') || 'Nespecificat'}</Text><Text style={list.col}>{unspecified(item.destination)}</Text></> :
+      <View style={{ gap: 5 }}><Text style={list.primary}>{unspecified(item.driverName)} · {availability(item.availability)}</Text><Text style={list.secondary}>Telefon: {formatInternationalPhone(item.driverPhoneE164)}</Text><Text style={list.secondary}>{[item.country, item.city].filter(Boolean).join(', ') || 'Nespecificat'}</Text><Text style={list.secondary}>Destinație: {unspecified(item.destination)}</Text></View>}
     </Pressable>}
     ListEmptyComponent={loading ? <ActivityIndicator size="large" color={colors.accent} /> : <View style={list.empty}><Text style={ui.title}>Nu există mașini disponibile</Text><Text style={ui.subtitle}>{error ? 'Verifică backendul și încearcă din nou.' : 'Contul Wialon nu a furnizat încă date.'}</Text><Button title="Reîncearcă" onPress={() => void enter()} /></View>}
   /></View>;
@@ -94,7 +95,7 @@ const list = StyleSheet.create({
   header: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 6 },
   card: { backgroundColor: colors.panel, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 14, gap: 8 },
   desktopRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 6, paddingVertical: 10 }, tableHeader: { width: '100%', flexDirection: 'row', paddingHorizontal: 14, marginTop: 10 },
-  colPlate: { flex: 1.1, flexDirection: 'row', gap: 8, alignItems: 'center' }, col: { flex: 1.4, color: colors.text, paddingRight: 8 },
+  colPlate: { flex: 1.1, flexDirection: 'row', gap: 8, alignItems: 'center' }, col: { flex: 1.25, color: colors.text, paddingRight: 8 }, colPhone: { flex: 1.35, color: colors.text, paddingRight: 8 },
   plate: { color: colors.text, fontWeight: '900', fontSize: 18 }, warning: { color: colors.yellow, fontWeight: '900', fontSize: 22 },
   primary: { color: colors.text, fontSize: 15 }, secondary: { color: colors.muted }, empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 }
 });

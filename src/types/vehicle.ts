@@ -2,6 +2,8 @@ export type Availability = 'AVAILABLE' | 'ON_TRIP' | 'HEADING_TO_PICKUP';
 export interface Warning { type: 'WIALON' | 'GEOCODING'; message: string; at: string | null }
 export interface Vehicle {
   id: string; wialonId: string; registrationNumber: string; driverName: string | null;
+  driverPhoneCountryIso: string | null; driverPhoneCountryCode: string | null;
+  driverPhoneNumber: string | null; driverPhoneE164: string | null;
   hasTachograph: boolean | null; vehicleModel: string | null; vehicleDetails: string | null;
   availability: Availability | null; destination: string | null; isActive: boolean;
   latitude: number | null; longitude: number | null; speedKph: number | null; positionAt: string | null;
