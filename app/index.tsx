@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { api } from '@/lib/api';
 import { availability, unspecified } from '@/lib/format';
@@ -10,6 +10,7 @@ import { AvailabilityMessageCard } from '@/components/availability-message-card'
 
 export default function FleetScreen() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +22,10 @@ export default function FleetScreen() {
   const activeRequest = useRef(false);
   const router = useRouter();
   const desktop = useWindowDimensions().width >= 1000;
+  const normalizedSearch = normalizeRegistrationNumber(search);
+  const filteredVehicles = normalizedSearch
+    ? vehicles.filter((vehicle) => normalizeRegistrationNumber(vehicle.registrationNumber).includes(normalizedSearch))
+    : vehicles;
 
   const enter = useCallback(async () => {
     if (activeRequest.current) return;
@@ -70,7 +75,7 @@ export default function FleetScreen() {
   };
 
   return <View style={ui.screen}><FlatList
-    data={vehicles} keyExtractor={(item) => item.id} contentContainerStyle={[ui.content, vehicles.length === 0 && { flexGrow: 1 }]}
+    data={filteredVehicles} keyExtractor={(item) => item.id} contentContainerStyle={[ui.content, filteredVehicles.length === 0 && { flexGrow: 1 }]}
     ListHeaderComponent={<View style={list.header}>
       <View style={{ flex: 1 }}><Text style={ui.title}>Transnila-POC</Text><Text style={ui.subtitle}>Flota activă sincronizată cu Wialon</Text></View>
       <Button title="Actualizează flota" onPress={manual} disabled={refreshing} />
@@ -80,19 +85,46 @@ export default function FleetScreen() {
         data={availabilityMessage} loading={messageLoading} refreshing={messageRefreshing}
         error={messageError} onRefresh={() => void refreshMessage()}
       /></View>
-      {desktop && vehicles.length > 0 && <View style={list.tableHeader}><Text style={list.colPlate}>Număr</Text><Text style={list.col}>Șofer</Text><Text style={list.colPhone}>Telefon</Text><Text style={list.col}>Disponibilitate</Text><Text style={list.col}>Locație</Text><Text style={list.col}>Destinație</Text></View>}
+      <View style={list.searchContainer}>
+        <TextInput
+          accessibilityLabel="Caută după numărul de înmatriculare"
+          autoCapitalize="characters"
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+          onChangeText={setSearch}
+          placeholder="Caută după numărul de înmatriculare..."
+          placeholderTextColor={colors.muted}
+          returnKeyType="search"
+          style={list.searchInput}
+          value={search}
+        />
+        {search.length > 0 && <Pressable accessibilityLabel="Șterge căutarea" hitSlop={10} onPress={() => setSearch('')} style={({ pressed }) => [list.clearSearch, pressed && { opacity: .65 }]}>
+          <Text style={list.clearSearchText}>×</Text>
+        </Pressable>}
+      </View>
+      {desktop && filteredVehicles.length > 0 && <View style={list.tableHeader}><Text style={list.colPlate}>Număr</Text><Text style={list.col}>Șofer</Text><Text style={list.colPhone}>Telefon</Text><Text style={list.col}>Disponibilitate</Text><Text style={list.col}>Locație</Text><Text style={list.col}>Destinație</Text></View>}
     </View>}
     renderItem={({ item }) => <Pressable onPress={() => router.push(`/vehicles/${item.id}`)} style={({ pressed }) => [list.card, desktop && list.desktopRow, pressed && { opacity: .7 }]}>
       <View style={list.colPlate}><Text style={list.plate}>{item.registrationNumber}</Text>{item.hasWarning && <Text accessibilityLabel="Avertizare actualizare" style={list.warning}>!</Text>}</View>
       {desktop ? <><Text style={list.col}>{unspecified(item.driverName)}</Text><Text style={list.colPhone}>{formatInternationalPhone(item.driverPhoneE164)}</Text><Text style={list.col}>{availability(item.availability)}</Text><Text style={list.col}>{[item.country, item.city].filter(Boolean).join(', ') || 'Nespecificat'}</Text><Text style={list.col}>{unspecified(item.destination)}</Text></> :
       <View style={{ gap: 5 }}><Text style={list.primary}>{unspecified(item.driverName)} · {availability(item.availability)}</Text><Text style={list.secondary}>Telefon: {formatInternationalPhone(item.driverPhoneE164)}</Text><Text style={list.secondary}>{[item.country, item.city].filter(Boolean).join(', ') || 'Nespecificat'}</Text><Text style={list.secondary}>Destinație: {unspecified(item.destination)}</Text></View>}
     </Pressable>}
-    ListEmptyComponent={loading ? <ActivityIndicator size="large" color={colors.accent} /> : <View style={list.empty}><Text style={ui.title}>Nu există mașini disponibile</Text><Text style={ui.subtitle}>{error ? 'Verifică backendul și încearcă din nou.' : 'Contul Wialon nu a furnizat încă date.'}</Text><Button title="Reîncearcă" onPress={() => void enter()} /></View>}
+    ListEmptyComponent={loading ? <ActivityIndicator size="large" color={colors.accent} /> : normalizedSearch && vehicles.length > 0
+      ? <View style={list.empty}><Text style={ui.title}>Niciun rezultat</Text><Text style={ui.subtitle}>Nu am găsit niciun număr de înmatriculare pentru „{search.trim()}”.</Text><Button title="Șterge căutarea" onPress={() => setSearch('')} /></View>
+      : <View style={list.empty}><Text style={ui.title}>Nu există mașini disponibile</Text><Text style={ui.subtitle}>{error ? 'Verifică backendul și încearcă din nou.' : 'Contul Wialon nu a furnizat încă date.'}</Text><Button title="Reîncearcă" onPress={() => void enter()} /></View>}
   /></View>;
+}
+
+function normalizeRegistrationNumber(value: string | null | undefined) {
+  return (value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
 }
 
 const list = StyleSheet.create({
   header: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 6 },
+  searchContainer: { width: '100%', position: 'relative', justifyContent: 'center', marginTop: 2 },
+  searchInput: { minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.panel, color: colors.text, fontSize: 16, paddingHorizontal: 14, paddingRight: 48 },
+  clearSearch: { position: 'absolute', right: 8, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  clearSearchText: { color: colors.muted, fontSize: 28, lineHeight: 30 },
   card: { backgroundColor: colors.panel, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 14, gap: 8 },
   desktopRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 6, paddingVertical: 10 }, tableHeader: { width: '100%', flexDirection: 'row', paddingHorizontal: 14, marginTop: 10 },
   colPlate: { flex: 1.1, flexDirection: 'row', gap: 8, alignItems: 'center' }, col: { flex: 1.25, color: colors.text, paddingRight: 8 }, colPhone: { flex: 1.35, color: colors.text, paddingRight: 8 },
