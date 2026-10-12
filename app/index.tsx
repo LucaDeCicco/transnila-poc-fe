@@ -21,7 +21,9 @@ export default function FleetScreen() {
   const [lastFleetSuccessAt, setLastFleetSuccessAt] = useState<string | null>(null);
   const activeRequest = useRef(false);
   const router = useRouter();
-  const desktop = useWindowDimensions().width >= 1000;
+  const { width } = useWindowDimensions();
+  const desktop = width >= 1000;
+  const compactHeader = width < 700;
   const normalizedSearch = normalizeRegistrationNumber(search);
   const filteredVehicles = normalizedSearch
     ? vehicles.filter((vehicle) => normalizeRegistrationNumber(vehicle.registrationNumber).includes(normalizedSearch))
@@ -79,9 +81,9 @@ export default function FleetScreen() {
   return <View style={ui.screen}><FlatList
     data={filteredVehicles} keyExtractor={(item) => item.id} contentContainerStyle={[ui.content, filteredVehicles.length === 0 && { flexGrow: 1 }]}
     ListHeaderComponent={<View style={list.header}>
-      <View style={{ flex: 1 }}><Text style={ui.title}>Transnila-POC</Text><Text style={ui.subtitle}>Flota activă sincronizată cu Wialon</Text></View>
-      <View style={list.lastUpdate}><Text style={list.lastUpdateLabel}>Ultima actualizare locații</Text><Text style={list.lastUpdateValue}>{bucharestDate(lastFleetSuccessAt)}</Text></View>
-      <Button title="Actualizează flota" onPress={manual} disabled={refreshing} />
+      <View style={[list.identity, compactHeader && list.compactHeaderItem]}><Text style={ui.title}>Transnila-POC</Text><Text style={ui.subtitle}>Flota activă sincronizată cu Wialon</Text></View>
+      <View style={[list.lastUpdate, compactHeader && list.compactLastUpdate]}><Text style={list.lastUpdateLabel}>Ultima actualizare locații</Text><Text style={list.lastUpdateValue}>{bucharestDate(lastFleetSuccessAt)}</Text></View>
+      <View style={compactHeader && list.compactHeaderItem}><Button title="Actualizează flota" onPress={manual} disabled={refreshing} /></View>
       {error && <View style={{ width: '100%' }}><Message error>{error}</Message></View>}
       {result && <View style={{ width: '100%' }}><Message>{result}</Message></View>}
       <View style={{ width: '100%' }}><AvailabilityMessageCard
@@ -109,8 +111,8 @@ export default function FleetScreen() {
     </View>}
     renderItem={({ item }) => <Pressable onPress={() => router.push(`/vehicles/${item.id}`)} style={({ pressed }) => [list.card, { borderLeftColor: statusTone(item.availability).accent, backgroundColor: statusTone(item.availability).surface }, desktop && list.desktopRow, pressed && { opacity: .7 }]}>
       <View style={list.colPlate}><Text style={list.plate}>{item.registrationNumber}</Text>{item.hasWarning && <Text accessibilityLabel="Avertizare actualizare" style={list.warning}>!</Text>}</View>
-      {desktop ? <><Text style={list.col}>{unspecified(item.driverName)}</Text><Text style={list.colTachograph}>{tachograph(item.hasTachograph)}</Text><View style={list.col}><StatusBadge value={item.availability} /></View><Text style={list.col}>{[item.country, item.city].filter(Boolean).join(', ') || 'Nespecificat'}</Text><Text style={list.col}>{unspecified(item.destination)}</Text></> :
-      <View style={{ gap: 7 }}><View style={list.mobileSummary}><Text style={list.primary}>{unspecified(item.driverName)}</Text><StatusBadge value={item.availability} /></View><Text style={list.secondary}>Tahograf: {tachograph(item.hasTachograph)}</Text><Text style={list.secondary}>{[item.country, item.city].filter(Boolean).join(', ') || 'Nespecificat'}</Text><Text style={list.secondary}>Destinație: {unspecified(item.destination)}</Text></View>}
+      {desktop ? <><Text style={list.col}>{unspecified(item.driverName)}</Text><Text style={list.colTachograph}>{tachograph(item.hasTachograph)}</Text><View style={list.col}><StatusBadge value={item.availability} /></View><Text style={list.col}>{vehicleLocation(item) || 'Nespecificat'}</Text><Text style={list.col}>{unspecified(item.destination)}</Text></> :
+      <View style={{ gap: 7 }}><View style={list.mobileSummary}><Text style={list.primary}>{unspecified(item.driverName)}</Text><StatusBadge value={item.availability} /></View><Text style={list.secondary}>Tahograf: {tachograph(item.hasTachograph)}</Text><Text style={list.secondary}>{vehicleLocation(item) || 'Nespecificat'}</Text><Text style={list.secondary}>Destinație: {unspecified(item.destination)}</Text></View>}
     </Pressable>}
     ListEmptyComponent={loading ? <ActivityIndicator size="large" color={colors.accent} /> : normalizedSearch && vehicles.length > 0
       ? <View style={list.empty}><Text style={ui.title}>Niciun rezultat</Text><Text style={ui.subtitle}>Nu am găsit niciun număr de înmatriculare pentru „{search.trim()}”.</Text><Button title="Șterge căutarea" onPress={() => setSearch('')} /></View>
@@ -130,6 +132,9 @@ const statusColors: Record<Availability, { accent: string; surface: string; badg
 const unspecifiedStatus = { accent: colors.muted, surface: colors.panel, badge: colors.panel2 };
 const statusTone = (value: Availability | null) => value ? statusColors[value] : unspecifiedStatus;
 const tachograph = (value: boolean | null) => value === null ? 'Nespecificat' : value ? 'Da' : 'Nu';
+const vehicleLocation = (vehicle: Vehicle) => vehicle.postcode
+  ? [[vehicle.postcode, vehicle.city].filter(Boolean).join(' '), vehicle.country].filter(Boolean).join(', ')
+  : [vehicle.country, vehicle.city].filter(Boolean).join(', ');
 
 function StatusBadge({ value }: { value: Availability | null }) {
   const tone = statusTone(value);
@@ -138,7 +143,10 @@ function StatusBadge({ value }: { value: Availability | null }) {
 
 const list = StyleSheet.create({
   header: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 6 },
+  identity: { flex: 1, minWidth: 230 },
+  compactHeaderItem: { width: '100%', minWidth: 0 },
   lastUpdate: { alignItems: 'flex-end', minWidth: 190 },
+  compactLastUpdate: { width: '100%', minWidth: 0, alignItems: 'flex-start' },
   lastUpdateLabel: { color: colors.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
   lastUpdateValue: { color: colors.text, fontSize: 14, fontWeight: '700', marginTop: 2 },
   searchContainer: { width: '100%', position: 'relative', justifyContent: 'center', marginTop: 2 },
