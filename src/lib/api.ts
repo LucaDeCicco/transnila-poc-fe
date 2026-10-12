@@ -1,4 +1,4 @@
-import { AvailabilityMessageResponse, FleetRefreshStatus, RefreshResponse, Vehicle } from '../types/vehicle';
+import { AvailabilityMessageResponse, FleetRefreshStatus, LiveFleetResponse, MapConfig, RefreshResponse, Vehicle, VehicleRoute } from '../types/vehicle';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
 if (!API_BASE) console.warn('EXPO_PUBLIC_API_BASE_URL nu este configurat.');
@@ -18,6 +18,9 @@ export const api = {
   get: (id: string) => request<Vehicle>(`/vehicles/${encodeURIComponent(id)}`),
   patch: (id: string, data: object) => request<Vehicle>(`/vehicles/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),
   fleetRefreshStatus: () => request<FleetRefreshStatus>('/refresh/fleet/status'),
+  mapConfig: () => request<MapConfig>('/map/config'),
+  liveFleet: () => request<LiveFleetResponse>('/map/live', { method: 'POST' }),
+  vehicleRoute: (id: string) => request<VehicleRoute>(`/map/vehicles/${encodeURIComponent(id)}/route`),
   autoFleet: () => request<RefreshResponse>('/refresh/fleet/auto', { method: 'POST' }),
   manualFleet: () => request<RefreshResponse>('/refresh/fleet/manual', { method: 'POST' }),
   availabilityMessage: () => request<AvailabilityMessageResponse>('/availability-message'),

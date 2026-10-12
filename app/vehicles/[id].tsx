@@ -1,22 +1,28 @@
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { api } from '@/lib/api';
 import { availability as availabilityText, availabilityLabels, bucharestDate, unspecified } from '@/lib/format';
 import { formatInternationalPhone, normalizeNationalPhone } from '@/lib/phone';
-import { Availability, Vehicle } from '@/types/vehicle';
+import { Availability, MapConfig, RoutingMode, Vehicle, VehicleRoute } from '@/types/vehicle';
 import { Button, colors, Field, Message, Row, Section, styles as ui } from '@/components/ui';
 import { CountryPhoneField } from '@/components/country-phone-field';
+import { VehicleMap } from '@/components/vehicle-map';
 
-type Form = { driverName: string; phoneCountryIso: string; phoneNumber: string; tachograph: 'null' | 'true' | 'false'; vehicleModel: string; vehicleDetails: string; availability: Availability | 'null'; destination: string };
+type Form = { driverName: string; phoneCountryIso: string; phoneNumber: string; tachograph: 'null' | 'true' | 'false'; vehicleModel: string; vehicleDetails: string; availability: Availability | 'null'; destination: string; routingMode: RoutingMode };
 const fromVehicle = (v: Vehicle): Form => ({
   driverName: v.driverName ?? '', phoneCountryIso: v.driverPhoneCountryIso ?? 'RO', phoneNumber: v.driverPhoneNumber ?? '',
   tachograph: v.hasTachograph === null ? 'null' : String(v.hasTachograph) as 'true' | 'false',
-  vehicleModel: v.vehicleModel ?? '', vehicleDetails: v.vehicleDetails ?? '', availability: v.availability ?? 'null', destination: v.destination ?? ''
+  vehicleModel: v.vehicleModel ?? '', vehicleDetails: v.vehicleDetails ?? '', availability: v.availability ?? 'null', destination: v.destination ?? '', routingMode: v.routingMode
 });
+
+const routingModeLabels: Record<RoutingMode, string> = {
+  DRIVE: 'Autoturism', LIGHT_TRUCK: 'Autoutilitară', MEDIUM_TRUCK: 'Camion mediu', TRUCK: 'Camion', HEAVY_TRUCK: 'Camion greu'
+};
 
 export default function VehicleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [form, setForm] = useState<Form | null>(null);
   const [editing, setEditing] = useState(false);
@@ -26,7 +32,14 @@ export default function VehicleScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mapConfig, setMapConfig] = useState<MapConfig | null>(null);
+  const [fleet, setFleet] = useState<Vehicle[]>([]);
+  const [route, setRoute] = useState<VehicleRoute | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [mapRefreshing, setMapRefreshing] = useState(false);
+  const [lastMapUpdatedAt, setLastMapUpdatedAt] = useState<string | null>(null);
   const activeRequest = useRef(false);
+  const activeMapRequest = useRef(false);
   const editingRef = useRef(false);
 
   const enter = useCallback(async () => {
@@ -43,6 +56,36 @@ export default function VehicleScreen() {
   }, [id]);
   useFocusEffect(useCallback(() => { void enter(); return undefined; }, [enter]));
 
+  const refreshMap = useCallback(async () => {
+    if (!id || activeMapRequest.current) return;
+    activeMapRequest.current = true; setMapRefreshing(true);
+    try {
+      const live = await api.liveFleet();
+      setFleet(live.vehicles); setLastMapUpdatedAt(live.lastSuccessAt);
+      setMapError(live.success === false ? live.error ?? 'Actualizarea pozițiilor a eșuat.' : null);
+      const selected = live.vehicles.find((item) => item.id === id);
+      if (selected) {
+        setVehicle(selected);
+        setForm((current) => editingRef.current ? current : fromVehicle(selected));
+      }
+      setRoute(await api.vehicleRoute(id));
+    } catch (e) { setMapError(e instanceof Error ? e.message : 'Harta nu poate fi actualizată.'); }
+    finally { activeMapRequest.current = false; setMapRefreshing(false); }
+  }, [id]);
+  const openVehicle = useCallback((vehicleId: string) => router.push(`/vehicles/${vehicleId}`), [router]);
+
+  useFocusEffect(useCallback(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    api.mapConfig().then((config) => {
+      if (disposed) return;
+      setMapConfig(config);
+      void refreshMap();
+      timer = setInterval(() => void refreshMap(), Math.max(1, config.refreshIntervalSeconds) * 1000);
+    }).catch((e: unknown) => { if (!disposed) setMapError(e instanceof Error ? e.message : 'Configurația hărții nu poate fi încărcată.'); });
+    return () => { disposed = true; if (timer) clearInterval(timer); };
+  }, [refreshMap]));
+
   const save = async () => {
     if (!vehicle || !form || saving) return; setSaving(true); setError(null);
     try {
@@ -52,9 +95,10 @@ export default function VehicleScreen() {
         driverName: form.driverName, driverPhoneCountryIso: normalizedPhone ? form.phoneCountryIso : null, driverPhoneNumber: normalizedPhone,
         hasTachograph: form.tachograph === 'null' ? null : form.tachograph === 'true',
         vehicleModel: form.vehicleModel, vehicleDetails: form.vehicleDetails,
-        availability: form.availability === 'null' ? null : form.availability, destination: form.destination
+        availability: form.availability === 'null' ? null : form.availability, destination: form.destination, routingMode: form.routingMode
       });
       setVehicle(next); setForm(fromVehicle(next)); editingRef.current = false; setEditing(false); setMessage('Profilul a fost salvat.');
+      void refreshMap();
     } catch (e) { setError(e instanceof Error ? e.message : 'Salvarea a eșuat.'); }
     finally { setSaving(false); }
   };
@@ -65,6 +109,7 @@ export default function VehicleScreen() {
       if (result.vehicle) setVehicle(result.vehicle);
       if (!result.performed) setMessage(result.nextAllowedAt ? `Actualizarea este disponibilă după ${new Date(result.nextAllowedAt).toLocaleString('ro-RO')}.` : 'Actualizarea nu este disponibilă acum.');
       else if (!result.success) setError(result.error ?? 'Actualizarea a eșuat.'); else setMessage('Locația și adresa au fost actualizate.');
+      void refreshMap();
     } catch (e) { setError(e instanceof Error ? e.message : 'Actualizarea a eșuat.'); }
     finally { setRefreshing(false); }
   };
@@ -102,9 +147,22 @@ export default function VehicleScreen() {
       {editing ? <>
         <Choice label="Disponibilitate" value={form.availability} options={[['null', 'Nespecificat'], ...Object.entries(availabilityLabels)]} onChange={(availability) => setForm({ ...form, availability: availability as Form['availability'] })} />
         <Field label="Destinație" value={form.destination} onChangeText={(destination) => setForm({ ...form, destination })} maxLength={500} />
-      </> : <><Row label="Disponibilitate" value={availabilityText(vehicle.availability)} /><Row label="Destinație" value={unspecified(vehicle.destination)} /></>}
+        <Choice label="Profil de rutare" value={form.routingMode} options={Object.entries(routingModeLabels)} onChange={(routingMode) => setForm({ ...form, routingMode: routingMode as RoutingMode })} />
+      </> : <><Row label="Disponibilitate" value={availabilityText(vehicle.availability)} /><Row label="Destinație" value={unspecified(vehicle.destination)} /><Row label="Profil de rutare" value={routingModeLabels[vehicle.routingMode]} /></>}
     </Section>
     {editing && <View style={ui.actions}><Button title="Salvează" onPress={() => void save()} disabled={saving} /><Button secondary title="Anulează" onPress={() => { setForm(fromVehicle(vehicle)); editingRef.current = false; setEditing(false); setError(null); }} /></View>}
+    <Section title="Hartă live și traseu">
+      <View style={detail.mapMeta}><Text style={detail.muted}>Pozițiile flotei se actualizează la fiecare {mapConfig?.refreshIntervalSeconds ?? 60} secunde.</Text><Text style={detail.muted}>Ultima sincronizare: {bucharestDate(lastMapUpdatedAt)}</Text></View>
+      {mapError && <Message error>{mapError}</Message>}
+      {route?.warning && <View style={detail.warning}><Text style={detail.warningMark}>!</Text><Text style={detail.warningText}>{route.warning}</Text></View>}
+      {route?.status === 'ready' && <View style={detail.routeSummary}>
+        <Text style={detail.routeSummaryText}>Traseu: {formatDistance(route.distanceMeters)} · {formatDuration(route.durationSeconds)}</Text>
+        <Text style={detail.muted}>Destinație identificată: {route.destination?.formattedAddress}</Text>
+      </View>}
+      {mapConfig ? <VehicleMap config={mapConfig} vehicles={fleet.length ? fleet : [vehicle]} selectedVehicleId={vehicle.id} route={route} onVehiclePress={openVehicle} /> : !mapError && <ActivityIndicator color={colors.accent} />}
+      <View style={ui.actions}><Button secondary title={mapRefreshing ? 'Se actualizează…' : 'Actualizează harta'} onPress={() => void refreshMap()} disabled={mapRefreshing} /></View>
+      <Text style={detail.attribution}>{mapConfig?.attribution ?? vehicle.attribution}</Text>
+    </Section>
     <Section title="Locație">
       <Row label="Țară" value={unspecified(vehicle.country)} /><Row label="Cod țară" value={unspecified(vehicle.countryCode)} />
       <Row label="Localitate" value={unspecified(vehicle.city)} /><Row label="Regiune / județ" value={unspecified(vehicle.region)} />
@@ -140,11 +198,24 @@ function Choice({ label, value, options, onChange }: { label: string; value: str
   return <View style={{ gap: 6 }}><Text style={detail.choiceLabel}>{label}</Text><View style={detail.choices}>{options.map(([key, text]) => <Pressable key={key} onPress={() => onChange(key)} style={[detail.choice, value === key && detail.choiceActive]}><Text style={detail.choiceText}>{text}</Text></Pressable>)}</View></View>;
 }
 
+function formatDistance(value: number | null | undefined) {
+  if (value === null || value === undefined) return 'distanță nespecificată';
+  return value >= 1000 ? `${(value / 1000).toLocaleString('ro-RO', { maximumFractionDigits: 1 })} km` : `${Math.round(value)} m`;
+}
+function formatDuration(value: number | null | undefined) {
+  if (value === null || value === undefined) return 'durată nespecificată';
+  const totalMinutes = Math.max(1, Math.round(value / 60));
+  const hours = Math.floor(totalMinutes / 60); const minutes = totalMinutes % 60;
+  return hours ? `${hours} h ${minutes ? `${minutes} min` : ''}`.trim() : `${minutes} min`;
+}
+
 const detail = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center', padding: 20, gap: 14 }, heading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   warning: { flexDirection: 'row', gap: 10, backgroundColor: '#3b3212', padding: 12, borderRadius: 9 }, warningMark: { color: colors.yellow, fontSize: 24, fontWeight: '900' }, warningText: { color: colors.text, flex: 1 },
   attribution: { color: colors.muted, fontSize: 12 }, expand: { backgroundColor: colors.panel2, borderRadius: 8, padding: 12 }, expandText: { color: colors.text, fontWeight: '800' },
   subheading: { color: colors.text, fontWeight: '800', fontSize: 16, marginTop: 8 }, muted: { color: colors.muted },
+  mapMeta: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8 },
+  routeSummary: { backgroundColor: '#12345a', borderRadius: 9, padding: 12, gap: 4 }, routeSummaryText: { color: colors.text, fontWeight: '800' },
   choiceLabel: { color: colors.muted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' }, choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   choice: { paddingHorizontal: 12, paddingVertical: 10, backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1, borderRadius: 8 }, choiceActive: { backgroundColor: colors.accent, borderColor: colors.accent }, choiceText: { color: colors.text }
 });

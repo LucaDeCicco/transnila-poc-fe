@@ -23,7 +23,7 @@ După schimbarea `.env`, repornește Metro. Pentru telefon se poate porni cu `np
 
 ## Comportament
 
-La intrarea în listă sau în detalii, aplicația afișează întâi datele persistate și apoi trimite explicit un POST de verificare automată. Backendul decide dacă intervalul de 30 minute a expirat. Nu există polling sau refresh în fundal; un ecran rămas deschis nu se actualizează singur. Actualizarea manuală afișează rezultatele parțiale și momentul următor permis de cooldown.
+La intrarea în listă sau în detalii, aplicația afișează întâi datele persistate și apoi trimite explicit un POST de verificare automată. Backendul decide dacă intervalul de 30 minute a expirat. Cât timp ecranul de hartă este deschis, pozițiile întregii flote sunt cerute periodic la intervalul livrat de backend (implicit 60 secunde); lock-ul și intervalul global din PostgreSQL împiedică multiplicarea actualizărilor între utilizatori. Actualizarea manuală afișează rezultatele parțiale și momentul următor permis de cooldown.
 
 Ecranul principal conține și un mesaj de disponibilitate pregătit pentru WhatsApp. Vehiculele active marcate `AVAILABLE` sunt grupate după model, fără diferență între litere mari și mici. Butonul dedicat actualizează flota fără cooldown, regenerează mesajul și păstrează duplicatele de locație; butonul de copiere păstrează marcajele `*` folosite de WhatsApp pentru bold.
 
@@ -31,7 +31,7 @@ Editarea păstrează local valorile nesalvate când se schimbă datele GPS. Șir
 
 Profilul mașinii permite selectarea țării și introducerea telefonului șoferului. Numărul este validat internațional, apare atât în lista responsive, cât și în detalii, și oferă acțiuni directe pentru apel și WhatsApp. Numărul nu este inclus în mesajul public de disponibilitate.
 
-Adresele sunt furnizate prin Geoapify și datele cartografice OpenStreetMap; atribuirea este afișată în secțiunea locației. Butonul Google Maps folosește numai coordonatele GPS valide.
+Adresele, tile-urile și traseele sunt furnizate prin Geoapify, iar datele cartografice provin din OpenStreetMap/OpenMapTiles. În detaliile mașinii, MapLibre afișează mașina selectată, colegii cu coordonate valide și traseul către destinația geocodată. Configurația hărții și cheia restricționată sunt încărcate runtime din backend; în frontend nu există variabile Geoapify. Butonul Google Maps rămâne disponibil pentru coordonate GPS valide.
 
 ## Verificări
 
@@ -61,4 +61,4 @@ Variabila `EXPO_PUBLIC_API_BASE_URL` este inclusă în bundle la build; orice sc
 
 ## Limitări PoC
 
-Nu există autentificare, căutare, filtre, hartă integrată, mod offline cu coadă de editări sau notificări. Aplicația nu conține date demonstrative și arată o stare goală cu reîncercare dacă backendul ori furnizorii nu sunt disponibili la prima încărcare.
+Nu există autentificare, filtre avansate, mod offline cu coadă de editări sau notificări. Harta MapLibre este implementată pentru web; buildurile native afișează momentan un fallback până la integrarea MapLibre Native. Aplicația nu conține date demonstrative și arată o stare goală cu reîncercare dacă backendul ori furnizorii nu sunt disponibili la prima încărcare.
