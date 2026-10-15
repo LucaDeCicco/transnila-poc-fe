@@ -47,10 +47,17 @@ export function VehicleMap({ config, vehicles, selectedVehicleId, route, onVehic
       element.title = vehicle.registrationNumber;
       element.setAttribute('aria-label', `Mașina ${vehicle.registrationNumber}`);
       Object.assign(element.style, {
-        width: isSelected ? '26px' : '20px', height: isSelected ? '26px' : '20px', borderRadius: '50%',
-        border: '3px solid white', background: isSelected ? '#ef4444' : '#8b5cf6',
-        boxShadow: '0 2px 10px rgba(0,0,0,.65)', cursor: 'pointer', opacity: stale ? '.55' : '1'
+        display: 'flex', alignItems: 'center', gap: '6px', minHeight: '32px', padding: '4px 8px 4px 6px',
+        borderRadius: '8px', border: isSelected ? '4px solid #ef4444' : '2px solid white',
+        background: markerColor(vehicle), color: '#071018', fontFamily: 'system-ui, sans-serif',
+        fontSize: '12px', fontWeight: '900', lineHeight: '1', whiteSpace: 'nowrap',
+        boxShadow: isSelected ? '0 0 0 2px white, 0 3px 12px rgba(0,0,0,.8)' : '0 2px 10px rgba(0,0,0,.65)',
+        cursor: 'pointer', opacity: stale ? '.58' : '1', zIndex: isSelected ? '2' : '1'
       });
+      element.appendChild(truckIcon());
+      const plate = document.createElement('span');
+      plate.textContent = vehicle.registrationNumber;
+      element.appendChild(plate);
       const popupContent = document.createElement('div');
       Object.assign(popupContent.style, { color: '#111827', minWidth: '180px', fontFamily: 'system-ui, sans-serif' });
       const title = document.createElement('strong'); title.textContent = vehicle.registrationNumber; popupContent.appendChild(title);
@@ -107,6 +114,31 @@ export function VehicleMap({ config, vehicles, selectedVehicleId, route, onVehic
 
 function hasCoordinates(vehicle: Vehicle): vehicle is Vehicle & { latitude: number; longitude: number } {
   return vehicle.latitude !== null && vehicle.longitude !== null && Number.isFinite(vehicle.latitude) && Number.isFinite(vehicle.longitude);
+}
+function markerColor(vehicle: Vehicle) {
+  if (vehicle.availability === 'AVAILABLE') return '#34d399';
+  if (vehicle.availability === 'HEADING_TO_PICKUP') return '#f59e0b';
+  if (vehicle.availability === 'ON_TRIP') return '#60a5fa';
+  return '#94a3b8';
+}
+function truckIcon() {
+  const icon = document.createElement('span');
+  Object.assign(icon.style, { position: 'relative', display: 'block', width: '25px', height: '18px', flex: '0 0 25px' });
+
+  const cargo = document.createElement('span');
+  Object.assign(cargo.style, { position: 'absolute', left: '0', top: '2px', width: '15px', height: '11px', borderRadius: '2px 1px 1px 2px', background: '#05070a' });
+  icon.appendChild(cargo);
+
+  const cabin = document.createElement('span');
+  Object.assign(cabin.style, { position: 'absolute', left: '14px', top: '5px', width: '10px', height: '8px', borderRadius: '1px 3px 1px 1px', background: '#05070a', clipPath: 'polygon(0 0, 65% 0, 100% 45%, 100% 100%, 0 100%)' });
+  icon.appendChild(cabin);
+
+  for (const left of ['3px', '17px']) {
+    const wheel = document.createElement('span');
+    Object.assign(wheel.style, { position: 'absolute', left, bottom: '0', width: '6px', height: '6px', borderRadius: '50%', background: '#05070a', border: '1px solid rgba(255,255,255,.8)', boxSizing: 'border-box' });
+    icon.appendChild(wheel);
+  }
+  return icon;
 }
 function location(vehicle: Vehicle) { return [vehicle.city, vehicle.country].filter(Boolean).join(', ') || 'Locație nespecificată'; }
 function positionTime(value: string) {
