@@ -14,7 +14,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  list: () => request<Vehicle[]>('/vehicles'),
+  list: (activeOnly = true) => request<Vehicle[]>(`/vehicles?activeOnly=${activeOnly}`),
   get: (id: string) => request<Vehicle>(`/vehicles/${encodeURIComponent(id)}`),
   patch: (id: string, data: object) => request<Vehicle>(`/vehicles/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),
   fleetRefreshStatus: () => request<FleetRefreshStatus>('/refresh/fleet/status'),

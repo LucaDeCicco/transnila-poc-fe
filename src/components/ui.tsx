@@ -1,7 +1,7 @@
 import { PropsWithChildren } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
 
-export const colors = { bg: '#0b1018', panel: '#141c29', panel2: '#1b2636', text: '#f3f6fb', muted: '#99a8bc', accent: '#3b82f6', yellow: '#facc15', danger: '#fb7185', border: '#2a394d' };
+export const colors = { bg: '#0a0f17', panel: '#131b28', panel2: '#1a2636', text: '#f5f7fb', muted: '#96a6ba', accent: '#3b82f6', yellow: '#facc15', danger: '#fb7185', success: '#34d399', orange: '#f59e0b', border: '#29384b' };
 
 export function Section({ title, children }: PropsWithChildren<{ title: string }>) {
   return <View style={styles.section}><Text style={styles.sectionTitle}>{title}</Text>{children}</View>;
@@ -22,7 +22,7 @@ export function Message({ children, error }: PropsWithChildren<{ error?: boolean
 }
 
 export const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg }, content: { width: '100%', maxWidth: 1180, alignSelf: 'center', padding: 16, gap: 14 },
+  screen: { flex: 1, backgroundColor: colors.bg }, content: { width: '100%', maxWidth: 1380, alignSelf: 'center', padding: 16, gap: 14 },
   title: { color: colors.text, fontSize: 28, fontWeight: '800' }, subtitle: { color: colors.muted, fontSize: 14 },
   section: { backgroundColor: colors.panel, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: 16, gap: 10 },
   sectionTitle: { color: colors.text, fontWeight: '800', fontSize: 18, marginBottom: 4 }, row: { gap: 3, paddingVertical: 4 },

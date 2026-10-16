@@ -1,32 +1,44 @@
-import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { AppShell } from '@/components/app-shell';
+import { CountryPhoneField } from '@/components/country-phone-field';
+import { StatusBadge } from '@/components/fleet-ui';
+import { Button, colors, Field, Message, Row, Section, styles as ui } from '@/components/ui';
+import { VehicleMap } from '@/components/vehicle-map';
 import { api } from '@/lib/api';
 import { availability as availabilityText, availabilityLabels, bucharestDate, unspecified } from '@/lib/format';
 import { formatInternationalPhone, normalizeNationalPhone } from '@/lib/phone';
+import { positionAgeMinutes, vehicleIssues, vehicleLocation } from '@/lib/vehicle';
 import { Availability, MapConfig, RoutingMode, Vehicle, VehicleRoute } from '@/types/vehicle';
-import { Button, colors, Field, Message, Row, Section, styles as ui } from '@/components/ui';
-import { CountryPhoneField } from '@/components/country-phone-field';
-import { VehicleMap } from '@/components/vehicle-map';
 
+type Tab = 'overview' | 'map' | 'operations' | 'profile' | 'diagnostics';
+type Editing = 'operations' | 'profile' | null;
 type Form = { driverName: string; phoneCountryIso: string; phoneNumber: string; tachograph: 'null' | 'true' | 'false'; vehicleModel: string; vehicleDetails: string; availability: Availability | 'null'; destination: string; routingMode: RoutingMode };
-const fromVehicle = (v: Vehicle): Form => ({
-  driverName: v.driverName ?? '', phoneCountryIso: v.driverPhoneCountryIso ?? 'RO', phoneNumber: v.driverPhoneNumber ?? '',
-  tachograph: v.hasTachograph === null ? 'null' : String(v.hasTachograph) as 'true' | 'false',
-  vehicleModel: v.vehicleModel ?? '', vehicleDetails: v.vehicleDetails ?? '', availability: v.availability ?? 'null', destination: v.destination ?? '', routingMode: v.routingMode
+
+const tabs: { key: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'overview', label: 'Rezumat', icon: 'apps-outline' }, { key: 'map', label: 'Hartă și traseu', icon: 'map-outline' },
+  { key: 'operations', label: 'Operațiuni', icon: 'navigate-outline' }, { key: 'profile', label: 'Profil', icon: 'car-outline' },
+  { key: 'diagnostics', label: 'Diagnostic', icon: 'pulse-outline' }
+];
+const routingModeLabels: Record<RoutingMode, string> = { DRIVE: 'Autoturism', LIGHT_TRUCK: 'Autoutilitară', MEDIUM_TRUCK: 'Camion mediu', TRUCK: 'Camion', HEAVY_TRUCK: 'Camion greu' };
+const fromVehicle = (vehicle: Vehicle): Form => ({
+  driverName: vehicle.driverName ?? '', phoneCountryIso: vehicle.driverPhoneCountryIso ?? 'RO', phoneNumber: vehicle.driverPhoneNumber ?? '',
+  tachograph: vehicle.hasTachograph === null ? 'null' : String(vehicle.hasTachograph) as 'true' | 'false', vehicleModel: vehicle.vehicleModel ?? '',
+  vehicleDetails: vehicle.vehicleDetails ?? '', availability: vehicle.availability ?? 'null', destination: vehicle.destination ?? '', routingMode: vehicle.routingMode
 });
 
-const routingModeLabels: Record<RoutingMode, string> = {
-  DRIVE: 'Autoturism', LIGHT_TRUCK: 'Autoutilitară', MEDIUM_TRUCK: 'Camion mediu', TRUCK: 'Camion', HEAVY_TRUCK: 'Camion greu'
-};
-
 export default function VehicleScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string; section?: string }>();
+  const id = params.id;
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const wide = width >= 820;
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [form, setForm] = useState<Form | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [tab, setTab] = useState<Tab>(validTab(params.section) ?? 'overview');
+  const [editing, setEditing] = useState<Editing>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -38,184 +50,138 @@ export default function VehicleScreen() {
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapRefreshing, setMapRefreshing] = useState(false);
   const [lastMapUpdatedAt, setLastMapUpdatedAt] = useState<string | null>(null);
-  const activeRequest = useRef(false);
-  const activeMapRequest = useRef(false);
-  const editingRef = useRef(false);
+  const requestActive = useRef(false);
+  const mapRequestActive = useRef(false);
+  const editingRef = useRef<Editing>(null);
 
+  useEffect(() => { const requested = validTab(params.section); if (requested) setTab(requested); }, [params.section]);
+  const updateVehicle = useCallback((next: Vehicle) => { setVehicle(next); setForm((current) => editingRef.current ? current : fromVehicle(next)); }, []);
   const enter = useCallback(async () => {
-    if (!id || activeRequest.current) return;
-    activeRequest.current = true; setLoading(true); setError(null);
+    if (!id || requestActive.current) return;
+    requestActive.current = true; setLoading(true); setError(null);
     try {
-      const saved = await api.get(id); setVehicle(saved); setForm((current) => editingRef.current ? current : fromVehicle(saved)); setLoading(false);
-      const refreshed = await api.autoVehicle(id);
-      const next = refreshed.vehicle ?? await api.get(id);
-      setVehicle(next); setForm((current) => editingRef.current ? current : fromVehicle(next));
+      const saved = await api.get(id); updateVehicle(saved); setLoading(false);
+      const refreshed = await api.autoVehicle(id); updateVehicle(refreshed.vehicle ?? await api.get(id));
       if (refreshed.performed && refreshed.success === false) setError(refreshed.error ?? 'Actualizarea locației a eșuat.');
-    } catch (e) { setError(e instanceof Error ? e.message : 'Mașina nu poate fi încărcată.'); }
-    finally { setLoading(false); activeRequest.current = false; }
-  }, [id]);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Vehiculul nu poate fi încărcat.'); }
+    finally { requestActive.current = false; setLoading(false); }
+  }, [id, updateVehicle]);
   useFocusEffect(useCallback(() => { void enter(); return undefined; }, [enter]));
 
   const refreshMap = useCallback(async () => {
-    if (!id || activeMapRequest.current) return;
-    activeMapRequest.current = true; setMapRefreshing(true);
+    if (!id || mapRequestActive.current) return;
+    mapRequestActive.current = true; setMapRefreshing(true);
     try {
-      const live = await api.liveFleet();
-      setFleet(live.vehicles); setLastMapUpdatedAt(live.lastSuccessAt);
+      const live = await api.liveFleet(); setFleet(live.vehicles); setLastMapUpdatedAt(live.lastSuccessAt);
       setMapError(live.success === false ? live.error ?? 'Actualizarea pozițiilor a eșuat.' : null);
-      const selected = live.vehicles.find((item) => item.id === id);
-      if (selected) {
-        setVehicle(selected);
-        setForm((current) => editingRef.current ? current : fromVehicle(selected));
-      }
+      const current = live.vehicles.find((item) => item.id === id); if (current) updateVehicle(current);
       setRoute(await api.vehicleRoute(id));
     } catch (e) { setMapError(e instanceof Error ? e.message : 'Harta nu poate fi actualizată.'); }
-    finally { activeMapRequest.current = false; setMapRefreshing(false); }
-  }, [id]);
-  const openVehicle = useCallback((vehicleId: string) => router.push(`/vehicles/${vehicleId}`), [router]);
+    finally { mapRequestActive.current = false; setMapRefreshing(false); }
+  }, [id, updateVehicle]);
 
   useFocusEffect(useCallback(() => {
-    let disposed = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
-    api.mapConfig().then((config) => {
-      if (disposed) return;
-      setMapConfig(config);
-      void refreshMap();
-      timer = setInterval(() => void refreshMap(), Math.max(1, config.refreshIntervalSeconds) * 1000);
-    }).catch((e: unknown) => { if (!disposed) setMapError(e instanceof Error ? e.message : 'Configurația hărții nu poate fi încărcată.'); });
+    if (tab !== 'map') return undefined;
+    let disposed = false; let timer: ReturnType<typeof setInterval> | undefined;
+    api.mapConfig().then((config) => { if (disposed) return; setMapConfig(config); void refreshMap(); timer = setInterval(() => void refreshMap(), Math.max(1, config.refreshIntervalSeconds) * 1000); })
+      .catch((e: unknown) => { if (!disposed) setMapError(e instanceof Error ? e.message : 'Configurația hărții nu poate fi încărcată.'); });
     return () => { disposed = true; if (timer) clearInterval(timer); };
-  }, [refreshMap]));
+  }, [refreshMap, tab]));
 
+  const startEditing = (section: Exclude<Editing, null>) => { if (!vehicle) return; setForm(fromVehicle(vehicle)); editingRef.current = section; setEditing(section); setMessage(null); setError(null); setTab(section); };
+  const cancelEditing = () => { if (vehicle) setForm(fromVehicle(vehicle)); editingRef.current = null; setEditing(null); setError(null); };
   const save = async () => {
-    if (!vehicle || !form || saving) return; setSaving(true); setError(null);
+    if (!vehicle || !form || !editing || saving) return;
+    setSaving(true); setError(null); setMessage(null);
     try {
-      const normalizedPhone = form.phoneNumber.trim() ? normalizeNationalPhone(form.phoneNumber, form.phoneCountryIso) : null;
-      if (form.phoneNumber.trim() && !normalizedPhone) throw new Error('Numărul de telefon nu este valid pentru țara selectată.');
-      const next = await api.patch(vehicle.id, {
-        driverName: form.driverName, driverPhoneCountryIso: normalizedPhone ? form.phoneCountryIso : null, driverPhoneNumber: normalizedPhone,
-        hasTachograph: form.tachograph === 'null' ? null : form.tachograph === 'true',
-        vehicleModel: form.vehicleModel, vehicleDetails: form.vehicleDetails,
-        availability: form.availability === 'null' ? null : form.availability, destination: form.destination, routingMode: form.routingMode
-      });
-      setVehicle(next); setForm(fromVehicle(next)); editingRef.current = false; setEditing(false); setMessage('Profilul a fost salvat.');
-      void refreshMap();
+      let payload: object;
+      if (editing === 'operations') payload = { availability: form.availability === 'null' ? null : form.availability, destination: form.destination, routingMode: form.routingMode };
+      else {
+        const normalizedPhone = form.phoneNumber.trim() ? normalizeNationalPhone(form.phoneNumber, form.phoneCountryIso) : null;
+        if (form.phoneNumber.trim() && !normalizedPhone) throw new Error('Numărul de telefon nu este valid pentru țara selectată.');
+        payload = { driverName: form.driverName, driverPhoneCountryIso: normalizedPhone ? form.phoneCountryIso : null, driverPhoneNumber: normalizedPhone, hasTachograph: form.tachograph === 'null' ? null : form.tachograph === 'true', vehicleModel: form.vehicleModel, vehicleDetails: form.vehicleDetails };
+      }
+      const next = await api.patch(vehicle.id, payload); updateVehicle(next); editingRef.current = null; setEditing(null); setMessage(editing === 'operations' ? 'Datele operaționale au fost salvate.' : 'Profilul vehiculului a fost salvat.');
+      if (tab === 'map') void refreshMap();
     } catch (e) { setError(e instanceof Error ? e.message : 'Salvarea a eșuat.'); }
     finally { setSaving(false); }
   };
   const manualRefresh = async () => {
-    if (!vehicle || refreshing) return; setRefreshing(true); setError(null); setMessage(null);
+    if (!vehicle || refreshing) return;
+    setRefreshing(true); setError(null); setMessage(null);
     try {
-      const result = await api.manualVehicle(vehicle.id);
-      if (result.vehicle) setVehicle(result.vehicle);
-      if (!result.performed) setMessage(result.nextAllowedAt ? `Actualizarea este disponibilă după ${new Date(result.nextAllowedAt).toLocaleString('ro-RO')}.` : 'Actualizarea nu este disponibilă acum.');
+      const result = await api.manualVehicle(vehicle.id); if (result.vehicle) updateVehicle(result.vehicle);
+      if (!result.performed) setMessage(result.nextAllowedAt ? `Actualizarea este disponibilă ${bucharestDate(result.nextAllowedAt)}.` : 'Actualizarea nu este disponibilă acum.');
       else if (!result.success) setError(result.error ?? 'Actualizarea a eșuat.'); else setMessage('Locația și adresa au fost actualizate.');
-      void refreshMap();
+      if (tab === 'map') void refreshMap();
     } catch (e) { setError(e instanceof Error ? e.message : 'Actualizarea a eșuat.'); }
     finally { setRefreshing(false); }
   };
 
-  if (loading && !vehicle) return <View style={[ui.screen, detail.center]}><ActivityIndicator size="large" color={colors.accent} /></View>;
-  if (!vehicle || !form) return <View style={[ui.screen, detail.center]}><Message error>{error ?? 'Mașina nu a fost găsită.'}</Message><Button title="Reîncearcă" onPress={() => void enter()} /></View>;
-  const trackerEntries = Object.entries(vehicle.trackerParams ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  if (loading && !vehicle) return <AppShell active="vehicles" title="Vehicul" back><View style={detail.center}><ActivityIndicator size="large" color={colors.accent} /></View></AppShell>;
+  if (!vehicle || !form) return <AppShell active="vehicles" title="Vehicul" back><View style={detail.center}><Message error>{error ?? 'Vehiculul nu a fost găsit.'}</Message><Button title="Reîncearcă" onPress={() => void enter()} /></View></AppShell>;
+  const issues = vehicleIssues(vehicle, mapConfig?.stalePositionMinutes ?? 15);
+  const attention = issues.filter((issue) => issue.severity === 'attention');
+  const age = positionAgeMinutes(vehicle);
+  const editAction = (tab === 'operations' || tab === 'profile') && !editing ? <Button title="Editează" onPress={() => startEditing(tab)} /> : undefined;
 
-  return <ScrollView style={ui.screen} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
-    <View style={detail.heading}><View style={{ flex: 1 }}><Text style={ui.title}>{vehicle.registrationNumber}</Text><Text style={ui.subtitle}>{vehicle.isActive ? 'Activă în flota Wialon' : 'Inactivă în flota Wialon'}</Text></View>
-      {!editing && <Button title="Editează" onPress={() => { setForm(fromVehicle(vehicle)); editingRef.current = true; setEditing(true); setMessage(null); }} />}
+  return <AppShell active="vehicles" title={vehicle.registrationNumber} subtitle={`${vehicle.isActive ? 'Activ în Wialon' : 'Inactiv în Wialon'} · poziție ${age === null ? 'nespecificată' : `acum ${age} min`}`} back action={editAction}>
+    <View style={detail.root}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={detail.tabScroller} contentContainerStyle={detail.tabs}>{tabs.map((item) => <Pressable key={item.key} onPress={() => { setTab(item.key); if (editing && item.key !== editing) cancelEditing(); }} style={[detail.tab, tab === item.key && detail.tabActive]}><Ionicons name={item.icon} size={18} color={tab === item.key ? '#fff' : colors.muted} /><Text style={[detail.tabText, tab === item.key && detail.tabTextActive]}>{item.label}</Text>{item.key === 'diagnostics' && attention.length > 0 && <View style={detail.tabCount}><Text style={detail.tabCountText}>{attention.length}</Text></View>}</Pressable>)}</ScrollView>
+      <ScrollView style={detail.scroll} contentContainerStyle={[ui.content, detail.content]} keyboardShouldPersistTaps="handled">
+        {error && <Message error>{error}</Message>}{message && <Message>{message}</Message>}
+        {tab === 'overview' && <Overview vehicle={vehicle} issues={issues} wide={wide} onTab={setTab} onEdit={startEditing} onRefresh={() => void manualRefresh()} refreshing={refreshing} />}
+        {tab === 'map' && <MapTab vehicle={vehicle} config={mapConfig} fleet={fleet} route={route} error={mapError} refreshing={mapRefreshing} lastUpdatedAt={lastMapUpdatedAt} onRefresh={() => void refreshMap()} onOpenVehicle={(vehicleId) => router.push(`/vehicles/${vehicleId}`)} />}
+        {tab === 'operations' && <OperationsTab vehicle={vehicle} form={form} editing={editing === 'operations'} setForm={setForm} />}
+        {tab === 'profile' && <ProfileTab vehicle={vehicle} form={form} editing={editing === 'profile'} setForm={setForm} />}
+        {tab === 'diagnostics' && <DiagnosticsTab vehicle={vehicle} issues={issues} onRefresh={() => void manualRefresh()} refreshing={refreshing} />}
+        {editing && <View style={detail.stickyActions}><Button title="Salvează modificările" onPress={() => void save()} disabled={saving} /><Button secondary title="Anulează" onPress={cancelEditing} /></View>}
+      </ScrollView>
     </View>
-    {error && <Message error>{error}</Message>}{message && <Message>{message}</Message>}
-    <Section title="Profil">
-      <Row label="Număr de înmatriculare" value={vehicle.registrationNumber} />
-      {editing ? <>
-        <Field label="Șofer" value={form.driverName} onChangeText={(driverName) => setForm({ ...form, driverName })} maxLength={120} />
-        <CountryPhoneField countryIso={form.phoneCountryIso} phoneNumber={form.phoneNumber}
-          onCountryChange={(phoneCountryIso) => setForm({ ...form, phoneCountryIso })}
-          onPhoneChange={(phoneNumber) => setForm({ ...form, phoneNumber })} />
-        <Choice label="Tahograf" value={form.tachograph} options={[['null', 'Nespecificat'], ['true', 'Da'], ['false', 'Nu']]} onChange={(tachograph) => setForm({ ...form, tachograph: tachograph as Form['tachograph'] })} />
-        <Field label="Model" value={form.vehicleModel} onChangeText={(vehicleModel) => setForm({ ...form, vehicleModel })} maxLength={120} />
-        <Field label="Detaliile mașinii" multiline value={form.vehicleDetails} onChangeText={(vehicleDetails) => setForm({ ...form, vehicleDetails })} maxLength={4000} />
-      </> : <>
-        <Row label="Șofer" value={unspecified(vehicle.driverName)} /><Row label="Telefon" value={formatInternationalPhone(vehicle.driverPhoneE164)} />
-        {vehicle.driverPhoneE164 && <View style={ui.actions}>
-          <Button title="Sună" onPress={() => void Linking.openURL(`tel:${vehicle.driverPhoneE164}`)} />
-          <Button secondary title="Deschide WhatsApp" onPress={() => void Linking.openURL(`https://wa.me/${vehicle.driverPhoneE164!.replace(/\D/g, '')}`)} />
-        </View>}
-        <Row label="Tahograf" value={vehicle.hasTachograph === null ? 'Nespecificat' : vehicle.hasTachograph ? 'Da' : 'Nu'} />
-        <Row label="Model" value={unspecified(vehicle.vehicleModel)} /><Row label="Detaliile mașinii" value={unspecified(vehicle.vehicleDetails)} />
-      </>}
-    </Section>
-    <Section title="Disponibilitate și destinație">
-      {editing ? <>
-        <Choice label="Disponibilitate" value={form.availability} options={[['null', 'Nespecificat'], ...Object.entries(availabilityLabels)]} onChange={(availability) => setForm({ ...form, availability: availability as Form['availability'] })} />
-        <Field label="Destinație" value={form.destination} onChangeText={(destination) => setForm({ ...form, destination })} maxLength={500} />
-        <Choice label="Profil de rutare" value={form.routingMode} options={Object.entries(routingModeLabels)} onChange={(routingMode) => setForm({ ...form, routingMode: routingMode as RoutingMode })} />
-      </> : <><Row label="Disponibilitate" value={availabilityText(vehicle.availability)} /><Row label="Destinație" value={unspecified(vehicle.destination)} /><Row label="Profil de rutare" value={routingModeLabels[vehicle.routingMode]} /></>}
-    </Section>
-    {editing && <View style={ui.actions}><Button title="Salvează" onPress={() => void save()} disabled={saving} /><Button secondary title="Anulează" onPress={() => { setForm(fromVehicle(vehicle)); editingRef.current = false; setEditing(false); setError(null); }} /></View>}
-    <Section title="Hartă live și traseu">
-      <View style={detail.mapMeta}><Text style={detail.muted}>Pozițiile flotei se actualizează la fiecare {mapConfig?.refreshIntervalSeconds ?? 60} secunde.</Text><Text style={detail.muted}>Ultima sincronizare: {bucharestDate(lastMapUpdatedAt)}</Text></View>
-      {mapError && <Message error>{mapError}</Message>}
-      {route?.warning && <View style={detail.warning}><Text style={detail.warningMark}>!</Text><Text style={detail.warningText}>{route.warning}</Text></View>}
-      {route?.status === 'ready' && <View style={detail.routeSummary}>
-        <Text style={detail.routeSummaryText}>Traseu: {formatDistance(route.distanceMeters)} · {formatDuration(route.durationSeconds)}</Text>
-        <Text style={detail.muted}>Destinație identificată: {route.destination?.formattedAddress}</Text>
-      </View>}
-      {mapConfig ? <VehicleMap config={mapConfig} vehicles={fleet.length ? fleet : [vehicle]} selectedVehicleId={vehicle.id} route={route} onVehiclePress={openVehicle} /> : !mapError && <ActivityIndicator color={colors.accent} />}
-      <View style={ui.actions}><Button secondary title={mapRefreshing ? 'Se actualizează…' : 'Actualizează harta'} onPress={() => void refreshMap()} disabled={mapRefreshing} /></View>
-      <Text style={detail.attribution}>{mapConfig?.attribution ?? vehicle.attribution}</Text>
-    </Section>
-    <Section title="Locație">
-      <Row label="Țară" value={unspecified(vehicle.country)} /><Row label="Cod țară" value={unspecified(vehicle.countryCode)} />
-      <Row label="Localitate" value={unspecified(vehicle.city)} /><Row label="Regiune / județ" value={unspecified(vehicle.region)} />
-      <Row label="District / suburbie" value={unspecified(vehicle.district)} /><Row label="Stradă" value={unspecified(vehicle.street)} />
-      <Row label="Număr" value={unspecified(vehicle.houseNumber)} /><Row label="Cod poștal" value={unspecified(vehicle.postcode)} />
-      <Row label="Adresă completă" value={unspecified(vehicle.formattedAddress)} /><Row label="Latitudine" value={unspecified(vehicle.latitude)} />
-      <Row label="Longitudine" value={unspecified(vehicle.longitude)} /><Row label="Ultima geocodare reușită (Europe/Bucharest)" value={bucharestDate(vehicle.lastGeocodedAt)} />
-      <Row label="Starea actualizării" value={vehicle.warnings.length ? 'Necesită atenție' : 'Fără erori active'} />
-      {vehicle.warnings.map((warning) => <View key={warning.type} style={detail.warning}><Text style={detail.warningMark}>!</Text><Text style={detail.warningText}>{warning.message}{warning.at ? `\nTentativă: ${bucharestDate(warning.at)}` : ''}</Text></View>)}
-      <View style={ui.actions}><Button title="Actualizează locația" onPress={() => void manualRefresh()} disabled={refreshing} />
-        <Button secondary title="Deschide în Google Maps" disabled={vehicle.latitude === null || vehicle.longitude === null} onPress={() => void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${vehicle.latitude},${vehicle.longitude}`)} /></View>
-      <Text style={detail.attribution}>{vehicle.attribution}</Text>
-    </Section>
-    <Section title="Mai multe detalii — GPS și tracker">
-      <Pressable onPress={() => setExpanded(!expanded)} style={detail.expand}><Text style={detail.expandText}>{expanded ? 'Ascunde detaliile' : 'Afișează detaliile'}</Text></Pressable>
-      {expanded && <>
-        <Row label="Viteză raportată la momentul poziției" value={vehicle.speedKph === null ? 'Nespecificat' : `${vehicle.speedKph} km/h`} />
-        <Row label="Ultima poziție GPS (Europe/Bucharest)" value={bucharestDate(vehicle.positionAt)} />
-        <Row label="Ultimul mesaj (Europe/Bucharest)" value={bucharestDate(vehicle.lastMessageAt)} />
-        <Row label="Recepția mesajului (Europe/Bucharest)" value={bucharestDate(vehicle.lastMessageReceivedAt)} />
-        <Row label="Latitudine / longitudine" value={vehicle.latitude === null || vehicle.longitude === null ? 'Nespecificat' : `${vehicle.latitude}, ${vehicle.longitude}`} />
-        <Row label="Direcție" value={vehicle.courseDegrees === null ? 'Nespecificat' : `${vehicle.courseDegrees}°`} />
-        <Row label="Altitudine" value={vehicle.altitudeMeters === null ? 'Nespecificat' : `${vehicle.altitudeMeters} m`} />
-        <Row label="Sateliți" value={unspecified(vehicle.satellites)} />
-        <Text style={detail.subheading}>Parametri tehnici ai trackerului</Text>
-        {trackerEntries.length ? trackerEntries.map(([key, value]) => <Row key={key} label={key} value={typeof value === 'object' ? JSON.stringify(value, null, 2) : unspecified(value)} />) : <Text style={detail.muted}>Nespecificat</Text>}
-      </>}
-    </Section>
-  </ScrollView>;
+  </AppShell>;
 }
 
-function Choice({ label, value, options, onChange }: { label: string; value: string; options: string[][]; onChange: (value: string) => void }) {
-  return <View style={{ gap: 6 }}><Text style={detail.choiceLabel}>{label}</Text><View style={detail.choices}>{options.map(([key, text]) => <Pressable key={key} onPress={() => onChange(key)} style={[detail.choice, value === key && detail.choiceActive]}><Text style={detail.choiceText}>{text}</Text></Pressable>)}</View></View>;
+function Overview({ vehicle, issues, wide, onTab, onEdit, onRefresh, refreshing }: { vehicle: Vehicle; issues: ReturnType<typeof vehicleIssues>; wide: boolean; onTab: (tab: Tab) => void; onEdit: (section: 'operations' | 'profile') => void; onRefresh: () => void; refreshing: boolean }) {
+  return <>
+    <View style={detail.hero}><View style={detail.heroTop}><View><Text style={detail.heroPlate}>{vehicle.registrationNumber}</Text><Text style={detail.muted}>{vehicle.vehicleModel ?? 'Model nespecificat'} · {vehicle.driverName ?? 'Șofer nespecificat'}</Text></View><StatusBadge value={vehicle.availability} /></View>
+      <View style={detail.quickActions}><Button title="Status și destinație" onPress={() => onEdit('operations')} /><Button secondary title="Profil" onPress={() => onEdit('profile')} /><Button secondary title="Actualizează poziția" onPress={onRefresh} disabled={refreshing} /></View>
+    </View>
+    <View style={[detail.overviewGrid, wide && detail.overviewGridWide]}>
+      <View style={detail.overviewColumn}><Section title="Operațiuni"><SummaryRow icon="location-outline" label="Locație actuală" value={vehicleLocation(vehicle) || 'Nespecificat'} /><SummaryRow icon="flag-outline" label="Destinație" value={unspecified(vehicle.destination)} /><SummaryRow icon="time-outline" label="Ultima poziție GPS" value={bucharestDate(vehicle.positionAt)} /><SummaryRow icon="speedometer-outline" label="Viteză" value={vehicle.speedKph === null ? 'Nespecificat' : `${vehicle.speedKph} km/h`} /><Pressable onPress={() => onTab('map')} style={detail.inlineLink}><Text style={detail.inlineLinkText}>Deschide harta și traseul</Text><Ionicons name="arrow-forward" size={18} color="#93c5fd" /></Pressable></Section></View>
+      <View style={detail.overviewColumn}><Section title="Contact și profil"><SummaryRow icon="person-outline" label="Șofer" value={unspecified(vehicle.driverName)} /><SummaryRow icon="call-outline" label="Telefon" value={formatInternationalPhone(vehicle.driverPhoneE164)} /><SummaryRow icon="timer-outline" label="Tahograf" value={vehicle.hasTachograph === null ? 'Nespecificat' : vehicle.hasTachograph ? 'Da' : 'Nu'} /><SummaryRow icon="git-branch-outline" label="Profil rutare" value={routingModeLabels[vehicle.routingMode]} />{vehicle.driverPhoneE164 && <View style={detail.quickActions}><Button secondary title="Sună" onPress={() => void Linking.openURL(`tel:${vehicle.driverPhoneE164}`)} /><Button secondary title="WhatsApp" onPress={() => void Linking.openURL(`https://wa.me/${vehicle.driverPhoneE164!.replace(/\D/g, '')}`)} /></View>}</Section></View>
+    </View>
+    <Section title={`Starea datelor (${issues.length})`}>{issues.length ? issues.slice(0, 5).map((issue) => <Pressable key={issue.key} onPress={() => onTab(issue.section === 'diagnostics' ? 'diagnostics' : issue.section)} style={detail.issue}><Ionicons name={issue.severity === 'attention' ? 'warning' : 'information-circle'} size={19} color={issue.severity === 'attention' ? colors.yellow : '#93c5fd'} /><View style={{ flex: 1 }}><Text style={detail.issueTitle}>{issue.title}</Text><Text style={detail.issueText}>{issue.detail}</Text></View><Ionicons name="chevron-forward" size={18} color={colors.muted} /></Pressable>) : <View style={detail.ok}><Ionicons name="checkmark-circle" size={22} color={colors.success} /><Text style={detail.okText}>Nu există probleme active sau date incomplete.</Text></View>}{issues.length > 5 && <Pressable onPress={() => onTab('diagnostics')}><Text style={detail.inlineLinkText}>Vezi toate cele {issues.length} atenționări</Text></Pressable>}</Section>
+  </>;
 }
 
-function formatDistance(value: number | null | undefined) {
-  if (value === null || value === undefined) return 'distanță nespecificată';
-  return value >= 1000 ? `${(value / 1000).toLocaleString('ro-RO', { maximumFractionDigits: 1 })} km` : `${Math.round(value)} m`;
+function MapTab({ vehicle, config, fleet, route, error, refreshing, lastUpdatedAt, onRefresh, onOpenVehicle }: { vehicle: Vehicle; config: MapConfig | null; fleet: Vehicle[]; route: VehicleRoute | null; error: string | null; refreshing: boolean; lastUpdatedAt: string | null; onRefresh: () => void; onOpenVehicle: (id: string) => void }) {
+  return <Section title="Hartă live și traseu"><View style={detail.mapMeta}><Text style={detail.muted}>Pozițiile se actualizează la {config?.refreshIntervalSeconds ?? 60} secunde.</Text><Text style={detail.muted}>Ultima sincronizare: {bucharestDate(lastUpdatedAt)}</Text></View>{error && <Message error>{error}</Message>}{route?.warning && <Message error>{route.warning}</Message>}{route?.status === 'ready' && <View style={detail.routeSummary}><Ionicons name="navigate" size={21} color="#93c5fd" /><View style={{ flex: 1 }}><Text style={detail.routeTitle}>{formatDistance(route.distanceMeters)} · {formatDuration(route.durationSeconds)}</Text><Text style={detail.muted}>Destinație identificată: {route.destination?.formattedAddress}</Text></View></View>}{config ? <VehicleMap config={config} vehicles={fleet.length ? fleet : [vehicle]} selectedVehicleId={vehicle.id} route={route} onVehiclePress={onOpenVehicle} height={460} /> : !error && <ActivityIndicator color={colors.accent} />}<View style={detail.quickActions}><Button secondary title={refreshing ? 'Se actualizează…' : 'Actualizează harta'} onPress={onRefresh} disabled={refreshing} /><Button secondary title="Deschide în Google Maps" disabled={vehicle.latitude === null || vehicle.longitude === null} onPress={() => void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${vehicle.latitude},${vehicle.longitude}`)} /></View><Text style={detail.attribution}>{config?.attribution ?? vehicle.attribution}</Text></Section>;
 }
-function formatDuration(value: number | null | undefined) {
-  if (value === null || value === undefined) return 'durată nespecificată';
-  const totalMinutes = Math.max(1, Math.round(value / 60));
-  const hours = Math.floor(totalMinutes / 60); const minutes = totalMinutes % 60;
-  return hours ? `${hours} h ${minutes ? `${minutes} min` : ''}`.trim() : `${minutes} min`;
+
+function OperationsTab({ vehicle, form, editing, setForm }: { vehicle: Vehicle; form: Form; editing: boolean; setForm: (form: Form) => void }) {
+  return <Section title="Disponibilitate și destinație">{editing ? <><Choice label="Disponibilitate" value={form.availability} options={[['null', 'Nespecificat'], ...Object.entries(availabilityLabels)]} onChange={(availability) => setForm({ ...form, availability: availability as Form['availability'] })} /><Field label="Destinație" value={form.destination} onChangeText={(destination) => setForm({ ...form, destination })} maxLength={500} placeholder="Ex.: DE 60549 Frankfurt" /><Choice label="Profil de rutare" value={form.routingMode} options={Object.entries(routingModeLabels)} onChange={(routingMode) => setForm({ ...form, routingMode: routingMode as RoutingMode })} /><Text style={detail.hint}>După salvare, destinația va fi identificată când este folosită de hartă sau mesaj.</Text></> : <><Row label="Disponibilitate" value={availabilityText(vehicle.availability)} /><Row label="Destinație introdusă" value={unspecified(vehicle.destination)} /><Row label="Destinație identificată" value={unspecified(vehicle.destinationFormattedAddress)} /><Row label="Cod poștal destinație" value={unspecified(vehicle.destinationPostcode)} /><Row label="Profil de rutare" value={routingModeLabels[vehicle.routingMode]} />{vehicle.destinationGeocodingError && <Message error>{vehicle.destinationGeocodingError}</Message>}</>}</Section>;
 }
+
+function ProfileTab({ vehicle, form, editing, setForm }: { vehicle: Vehicle; form: Form; editing: boolean; setForm: (form: Form) => void }) {
+  return <Section title="Profilul vehiculului"><Row label="Număr de înmatriculare" value={vehicle.registrationNumber} /><Row label="Stare Wialon" value={vehicle.isActive ? 'Activ' : 'Inactiv'} />{editing ? <><Field label="Șofer" value={form.driverName} onChangeText={(driverName) => setForm({ ...form, driverName })} maxLength={120} /><CountryPhoneField countryIso={form.phoneCountryIso} phoneNumber={form.phoneNumber} onCountryChange={(phoneCountryIso) => setForm({ ...form, phoneCountryIso })} onPhoneChange={(phoneNumber) => setForm({ ...form, phoneNumber })} /><Choice label="Tahograf" value={form.tachograph} options={[['null', 'Nespecificat'], ['true', 'Da'], ['false', 'Nu']]} onChange={(tachograph) => setForm({ ...form, tachograph: tachograph as Form['tachograph'] })} /><Field label="Model" value={form.vehicleModel} onChangeText={(vehicleModel) => setForm({ ...form, vehicleModel })} maxLength={120} /><Field label="Detalii vehicul" multiline value={form.vehicleDetails} onChangeText={(vehicleDetails) => setForm({ ...form, vehicleDetails })} maxLength={4000} /></> : <><Row label="Șofer" value={unspecified(vehicle.driverName)} /><Row label="Telefon" value={formatInternationalPhone(vehicle.driverPhoneE164)} /><Row label="Tahograf" value={vehicle.hasTachograph === null ? 'Nespecificat' : vehicle.hasTachograph ? 'Da' : 'Nu'} /><Row label="Model" value={unspecified(vehicle.vehicleModel)} /><Row label="Detalii vehicul" value={unspecified(vehicle.vehicleDetails)} />{vehicle.driverPhoneE164 && <View style={detail.quickActions}><Button title="Sună" onPress={() => void Linking.openURL(`tel:${vehicle.driverPhoneE164}`)} /><Button secondary title="Deschide WhatsApp" onPress={() => void Linking.openURL(`https://wa.me/${vehicle.driverPhoneE164!.replace(/\D/g, '')}`)} /></View>}</>}</Section>;
+}
+
+function DiagnosticsTab({ vehicle, issues, onRefresh, refreshing }: { vehicle: Vehicle; issues: ReturnType<typeof vehicleIssues>; onRefresh: () => void; refreshing: boolean }) {
+  const trackerEntries = Object.entries(vehicle.trackerParams ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  return <><Section title="Probleme și completitudine">{issues.length ? issues.map((issue) => <View key={issue.key} style={detail.issue}><Ionicons name={issue.severity === 'attention' ? 'warning' : 'information-circle'} size={19} color={issue.severity === 'attention' ? colors.yellow : '#93c5fd'} /><View style={{ flex: 1 }}><Text style={detail.issueTitle}>{issue.title}</Text><Text style={detail.issueText}>{issue.detail}</Text></View></View>) : <View style={detail.ok}><Ionicons name="checkmark-circle" size={22} color={colors.success} /><Text style={detail.okText}>Fără probleme active.</Text></View>}</Section><Section title="Locație și sincronizare"><Row label="Țară" value={unspecified(vehicle.country)} /><Row label="Cod țară" value={unspecified(vehicle.countryCode)} /><Row label="Localitate" value={unspecified(vehicle.city)} /><Row label="Regiune / județ" value={unspecified(vehicle.region)} /><Row label="District / suburbie" value={unspecified(vehicle.district)} /><Row label="Stradă și număr" value={[vehicle.street, vehicle.houseNumber].filter(Boolean).join(' ') || 'Nespecificat'} /><Row label="Cod poștal" value={unspecified(vehicle.postcode)} /><Row label="Adresă completă" value={unspecified(vehicle.formattedAddress)} /><Row label="Ultima geocodare" value={bucharestDate(vehicle.lastGeocodedAt)} /><Row label="Ultimul succes Wialon" value={bucharestDate(vehicle.lastWialonSuccessAt)} /><View style={detail.quickActions}><Button title="Actualizează locația" onPress={onRefresh} disabled={refreshing} /></View><Text style={detail.attribution}>{vehicle.attribution}</Text></Section><Section title="GPS și tracker"><Row label="Viteză" value={vehicle.speedKph === null ? 'Nespecificat' : `${vehicle.speedKph} km/h`} /><Row label="Ultima poziție GPS" value={bucharestDate(vehicle.positionAt)} /><Row label="Ultimul mesaj" value={bucharestDate(vehicle.lastMessageAt)} /><Row label="Recepția mesajului" value={bucharestDate(vehicle.lastMessageReceivedAt)} /><Row label="Latitudine / longitudine" value={vehicle.latitude === null || vehicle.longitude === null ? 'Nespecificat' : `${vehicle.latitude}, ${vehicle.longitude}`} /><Row label="Direcție" value={vehicle.courseDegrees === null ? 'Nespecificat' : `${vehicle.courseDegrees}°`} /><Row label="Altitudine" value={vehicle.altitudeMeters === null ? 'Nespecificat' : `${vehicle.altitudeMeters} m`} /><Row label="Sateliți" value={unspecified(vehicle.satellites)} />{trackerEntries.length > 0 && <><Text style={detail.subheading}>Parametri tehnici</Text>{trackerEntries.map(([key, value]) => <Row key={key} label={key} value={typeof value === 'object' ? JSON.stringify(value, null, 2) : unspecified(value)} />)}</>}</Section></>;
+}
+
+function SummaryRow({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }) { return <View style={detail.summaryRow}><View style={detail.summaryIcon}><Ionicons name={icon} size={18} color="#93c5fd" /></View><View style={{ flex: 1 }}><Text style={detail.summaryLabel}>{label}</Text><Text style={detail.summaryValue}>{value}</Text></View></View>; }
+function Choice({ label, value, options, onChange }: { label: string; value: string; options: string[][]; onChange: (value: string) => void }) { return <View style={{ gap: 7 }}><Text style={detail.choiceLabel}>{label}</Text><View style={detail.choices}>{options.map(([key, text]) => <Pressable key={key} onPress={() => onChange(key)} style={[detail.choice, value === key && detail.choiceActive]}><Text style={detail.choiceText}>{text}</Text></Pressable>)}</View></View>; }
+function validTab(value?: string): Tab | null { return tabs.some((item) => item.key === value) ? value as Tab : null; }
+function formatDistance(value: number | null | undefined) { return value === null || value === undefined ? 'Distanță nespecificată' : `${(value / 1000).toLocaleString('ro-RO', { maximumFractionDigits: 1 })} km`; }
+function formatDuration(value: number | null | undefined) { if (value === null || value === undefined) return 'Durată nespecificată'; const minutes = Math.max(1, Math.round(value / 60)); return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`; }
 
 const detail = StyleSheet.create({
-  center: { alignItems: 'center', justifyContent: 'center', padding: 20, gap: 14 }, heading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  warning: { flexDirection: 'row', gap: 10, backgroundColor: '#3b3212', padding: 12, borderRadius: 9 }, warningMark: { color: colors.yellow, fontSize: 24, fontWeight: '900' }, warningText: { color: colors.text, flex: 1 },
-  attribution: { color: colors.muted, fontSize: 12 }, expand: { backgroundColor: colors.panel2, borderRadius: 8, padding: 12 }, expandText: { color: colors.text, fontWeight: '800' },
-  subheading: { color: colors.text, fontWeight: '800', fontSize: 16, marginTop: 8 }, muted: { color: colors.muted },
-  mapMeta: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8 },
-  routeSummary: { backgroundColor: '#12345a', borderRadius: 9, padding: 12, gap: 4 }, routeSummaryText: { color: colors.text, fontWeight: '800' },
-  choiceLabel: { color: colors.muted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' }, choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  choice: { paddingHorizontal: 12, paddingVertical: 10, backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1, borderRadius: 8 }, choiceActive: { backgroundColor: colors.accent, borderColor: colors.accent }, choiceText: { color: colors.text }
+  root: { flex: 1, minHeight: 0 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20, gap: 14 }, tabScroller: { flexGrow: 0, backgroundColor: '#101722', borderBottomWidth: 1, borderBottomColor: colors.border }, tabs: { paddingHorizontal: 14, paddingVertical: 8, gap: 6 }, tab: { minHeight: 42, borderRadius: 10, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 7 }, tabActive: { backgroundColor: '#1e3a63' }, tabText: { color: colors.muted, fontSize: 12, fontWeight: '800' }, tabTextActive: { color: '#fff' }, tabCount: { minWidth: 19, height: 19, borderRadius: 10, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' }, tabCountText: { color: '#fff', fontSize: 10, fontWeight: '900' }, scroll: { flex: 1 }, content: { paddingTop: 16, paddingBottom: 34 },
+  hero: { borderRadius: 15, padding: 17, backgroundColor: colors.panel, borderColor: colors.border, borderWidth: 1, gap: 15 }, heroTop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }, heroPlate: { color: colors.text, fontSize: 27, fontWeight: '900' }, muted: { color: colors.muted, lineHeight: 19 }, quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
+  overviewGrid: { gap: 14 }, overviewGridWide: { flexDirection: 'row', alignItems: 'flex-start' }, overviewColumn: { flex: 1, minWidth: 0 }, summaryRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }, summaryIcon: { width: 34, height: 34, borderRadius: 9, backgroundColor: '#102f51', alignItems: 'center', justifyContent: 'center' }, summaryLabel: { color: colors.muted, fontSize: 10, fontWeight: '800', textTransform: 'uppercase' }, summaryValue: { color: colors.text, marginTop: 2, lineHeight: 19 }, inlineLink: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.panel2, borderRadius: 9, paddingHorizontal: 12 }, inlineLinkText: { color: '#93c5fd', fontWeight: '800', fontSize: 13 },
+  issue: { minHeight: 54, flexDirection: 'row', alignItems: 'flex-start', gap: 9, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }, issueTitle: { color: colors.text, fontWeight: '800' }, issueText: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 2 }, ok: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 9 }, okText: { color: colors.text, fontWeight: '700' },
+  mapMeta: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8 }, routeSummary: { backgroundColor: '#102f51', borderRadius: 10, padding: 12, flexDirection: 'row', gap: 10 }, routeTitle: { color: colors.text, fontWeight: '900', marginBottom: 3 }, attribution: { color: colors.muted, fontSize: 11 }, hint: { color: colors.muted, fontSize: 12, lineHeight: 18 }, stickyActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, padding: 13, borderRadius: 13, borderWidth: 1, borderColor: colors.border, backgroundColor: '#101722' },
+  choiceLabel: { color: colors.muted, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' }, choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, choice: { minHeight: 42, paddingHorizontal: 12, justifyContent: 'center', backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1, borderRadius: 9 }, choiceActive: { backgroundColor: colors.accent, borderColor: colors.accent }, choiceText: { color: colors.text, fontWeight: '700' }, subheading: { color: colors.text, fontWeight: '900', fontSize: 16, marginTop: 8 }
 });

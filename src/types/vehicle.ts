@@ -7,6 +7,10 @@ export interface Vehicle {
   driverPhoneNumber: string | null; driverPhoneE164: string | null;
   hasTachograph: boolean | null; vehicleModel: string | null; vehicleDetails: string | null;
   availability: Availability | null; destination: string | null; routingMode: RoutingMode; isActive: boolean;
+  destinationGeocodedQuery: string | null; destinationLatitude: number | null; destinationLongitude: number | null;
+  destinationFormattedAddress: string | null; destinationCountry: string | null; destinationCountryCode: string | null;
+  destinationCity: string | null; destinationPostcode: string | null; destinationGeocodingConfidence: number | null;
+  destinationGeocodedAt: string | null; destinationGeocodingError: string | null; destinationGeocodingErrorAt: string | null;
   latitude: number | null; longitude: number | null; speedKph: number | null; positionAt: string | null;
   courseDegrees: number | null; altitudeMeters: number | null; satellites: number | null;
   lastMessageAt: string | null; lastMessageReceivedAt: string | null; trackerParams: Record<string, unknown> | null;
@@ -22,7 +26,7 @@ export interface RefreshResponse {
 }
 export interface FleetRefreshStatus { lastSuccessAt: string | null }
 export interface MapConfig {
-  refreshIntervalSeconds: number; styleUrl: string; attribution: string;
+  refreshIntervalSeconds: number; stalePositionMinutes: number; styleUrl: string; attribution: string;
 }
 export interface LiveFleetResponse extends RefreshResponse {
   lastSuccessAt: string | null; vehicles: Vehicle[];
@@ -38,5 +42,15 @@ export interface AvailabilityMessageResponse {
   generatedAt: string;
   includedVehicles: number;
   incompleteVehicles: number;
+  vehicles: AvailabilityMessageVehicle[];
   refresh?: RefreshResponse;
+}
+export interface AvailabilityMessageVehicle {
+  id: string;
+  registrationNumber: string;
+  vehicleModel: string | null;
+  included: boolean;
+  reason: string | null;
+  locationSource: 'destination' | 'current';
+  location: string | null;
 }

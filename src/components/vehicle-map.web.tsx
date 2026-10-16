@@ -5,20 +5,25 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapConfig, Vehicle, VehicleRoute } from '../types/vehicle';
 import { availability } from '../lib/format';
 
-export function VehicleMap({ config, vehicles, selectedVehicleId, route, onVehiclePress }: {
-  config: MapConfig; vehicles: Vehicle[]; selectedVehicleId: string; route: VehicleRoute | null;
+export function VehicleMap({ config, vehicles, selectedVehicleId, route, onVehiclePress, height = 440, fitFleet = false }: {
+  config: MapConfig; vehicles: Vehicle[]; selectedVehicleId: string | null; route: VehicleRoute | null;
   onVehiclePress: (id: string) => void;
+  height?: number;
+  fitFleet?: boolean;
 }) {
   const container = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
   const markers = useRef<Marker[]>([]);
   const routeFitted = useRef(false);
+  const fleetFitted = useRef(false);
   const [loaded, setLoaded] = useState(false);
-  const selected = vehicles.find((vehicle) => vehicle.id === selectedVehicleId);
-  const selectedRef = useRef(selected); selectedRef.current = selected;
+  const selected = vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
+  const initialVehicle = selected ?? vehicles.find(hasCoordinates) ?? null;
+  const selectedRef = useRef(initialVehicle); selectedRef.current = initialVehicle;
   const selectedLatitude = selected?.latitude;
   const selectedLongitude = selected?.longitude;
-  const canDisplayMap = selected?.latitude !== null && selected?.latitude !== undefined && selected?.longitude !== null && selected?.longitude !== undefined;
+  const fleetIds = vehicles.filter(hasCoordinates).map((vehicle) => vehicle.id).sort().join('|');
+  const canDisplayMap = initialVehicle?.latitude !== null && initialVehicle?.latitude !== undefined && initialVehicle?.longitude !== null && initialVehicle?.longitude !== undefined;
 
   useEffect(() => {
     const initial = selectedRef.current;
@@ -31,9 +36,11 @@ export function VehicleMap({ config, vehicles, selectedVehicleId, route, onVehic
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     map.on('load', () => setLoaded(true));
     mapRef.current = map;
-    routeFitted.current = false;
+    routeFitted.current = false; fleetFitted.current = false;
     return () => { markers.current.forEach((marker) => marker.remove()); markers.current = []; map.remove(); mapRef.current = null; setLoaded(false); };
-  }, [canDisplayMap, config.styleUrl, selectedVehicleId]);
+  }, [canDisplayMap, config.styleUrl]);
+
+  useEffect(() => { if (fitFleet) fleetFitted.current = false; }, [fitFleet, fleetIds]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -41,7 +48,7 @@ export function VehicleMap({ config, vehicles, selectedVehicleId, route, onVehic
     markers.current.forEach((marker) => marker.remove());
     markers.current = vehicles.filter(hasCoordinates).map((vehicle) => {
       const isSelected = vehicle.id === selectedVehicleId;
-      const stale = !vehicle.positionAt || Date.now() - new Date(vehicle.positionAt).getTime() > 15 * 60_000;
+      const stale = !vehicle.positionAt || Date.now() - new Date(vehicle.positionAt).getTime() > config.stalePositionMinutes * 60_000;
       const element = document.createElement('button');
       element.type = 'button';
       element.title = vehicle.registrationNumber;
@@ -58,6 +65,7 @@ export function VehicleMap({ config, vehicles, selectedVehicleId, route, onVehic
       const plate = document.createElement('span');
       plate.textContent = vehicle.registrationNumber;
       element.appendChild(plate);
+      element.addEventListener('click', () => onVehiclePress(vehicle.id));
       const popupContent = document.createElement('div');
       Object.assign(popupContent.style, { color: '#111827', minWidth: '180px', fontFamily: 'system-ui, sans-serif' });
       const title = document.createElement('strong'); title.textContent = vehicle.registrationNumber; popupContent.appendChild(title);
@@ -74,7 +82,14 @@ export function VehicleMap({ config, vehicles, selectedVehicleId, route, onVehic
       return new maplibregl.Marker({ element }).setLngLat([vehicle.longitude!, vehicle.latitude!])
         .setPopup(new maplibregl.Popup({ offset: 18 }).setDOMContent(popupContent)).addTo(map);
     });
-  }, [loaded, onVehiclePress, selectedVehicleId, vehicles]);
+    const positioned = vehicles.filter(hasCoordinates);
+    if (fitFleet && !fleetFitted.current && positioned.length > 1) {
+      const bounds = new maplibregl.LngLatBounds();
+      positioned.forEach((vehicle) => bounds.extend([vehicle.longitude, vehicle.latitude]));
+      map.fitBounds(bounds, { padding: 60, maxZoom: 8, duration: 600 });
+      fleetFitted.current = true;
+    }
+  }, [config.stalePositionMinutes, fitFleet, loaded, onVehiclePress, selectedVehicleId, vehicles]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -106,10 +121,10 @@ export function VehicleMap({ config, vehicles, selectedVehicleId, route, onVehic
     }
   }, [loaded, route, selected]);
 
-  if (!selected || selected.latitude === null || selected.longitude === null) {
-    return <div style={fallbackStyle}>Poziția GPS nu este disponibilă pentru această mașină.</div>;
+  if (!initialVehicle || initialVehicle.latitude === null || initialVehicle.longitude === null) {
+    return <div style={{ ...fallbackStyle, height }}>Nu există poziții GPS disponibile pentru hartă.</div>;
   }
-  return <div ref={container} style={{ width: '100%', height: 440, borderRadius: 12, overflow: 'hidden', background: '#0b1018' }} />;
+  return <div ref={container} style={{ width: '100%', height, borderRadius: 12, overflow: 'hidden', background: '#0b1018' }} />;
 }
 
 function hasCoordinates(vehicle: Vehicle): vehicle is Vehicle & { latitude: number; longitude: number } {

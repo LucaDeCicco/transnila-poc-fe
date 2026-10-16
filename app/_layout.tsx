@@ -7,7 +7,11 @@ export default function RootLayout() {
     <StatusBar style="light" />
     <Stack screenOptions={{ headerStyle: { backgroundColor: colors.panel }, headerTintColor: colors.text, contentStyle: { backgroundColor: colors.bg } }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="vehicles/[id]" options={{ title: 'Detalii mașină' }} />
+      <Stack.Screen name="map" options={{ headerShown: false }} />
+      <Stack.Screen name="availability" options={{ headerShown: false }} />
+      <Stack.Screen name="attention" options={{ headerShown: false }} />
+      <Stack.Screen name="vehicles/index" options={{ headerShown: false }} />
+      <Stack.Screen name="vehicles/[id]" options={{ headerShown: false }} />
     </Stack>
   </>;
 }
