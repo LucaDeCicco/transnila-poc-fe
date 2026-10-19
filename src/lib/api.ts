@@ -1,6 +1,6 @@
-import { AvailabilityMessageResponse, FleetRefreshStatus, LiveFleetResponse, MapConfig, RefreshResponse, Vehicle, VehicleRoute } from '../types/vehicle';
+import { AvailabilityMessageResponse, BlobReference, ExtractionResult, FleetRefreshStatus, LiveFleetResponse, MapConfig, RefreshResponse, TripSearchResult, Vehicle, VehicleRoute } from '../types/vehicle';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
+export const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
 if (!API_BASE) console.warn('EXPO_PUBLIC_API_BASE_URL nu este configurat.');
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -9,8 +9,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init, headers: { 'content-type': 'application/json', ...init?.headers }
   });
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(payload?.message ?? `Cererea a eșuat (${response.status}).`);
+  if (!response.ok) throw new ApiError(payload?.message ?? `Cererea a eșuat (${response.status}).`, response.status, payload);
   return payload as T;
+}
+
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number, public readonly payload: unknown) { super(message); }
 }
 
 export const api = {
@@ -27,4 +31,9 @@ export const api = {
   refreshAvailabilityMessage: () => request<AvailabilityMessageResponse>('/availability-message/refresh', { method: 'POST' }),
   autoVehicle: (id: string) => request<RefreshResponse>(`/refresh/vehicles/${encodeURIComponent(id)}/auto`, { method: 'POST' }),
   manualVehicle: (id: string) => request<RefreshResponse>(`/refresh/vehicles/${encodeURIComponent(id)}/manual`, { method: 'POST' })
+  ,extractTrip: (blob: BlobReference) => request<ExtractionResult>('/trips/extract', { method: 'POST', body: JSON.stringify(blob) }),
+  cancelTripUpload: (blobUrl: string) => request<{ deleted: boolean }>('/trips/cancel-upload', { method: 'POST', body: JSON.stringify({ blobUrl }) }),
+  assignTrip: (vehicleId: string, data: object) => request<Vehicle>(`/trips/vehicles/${encodeURIComponent(vehicleId)}`, { method: 'PUT', body: JSON.stringify(data) }),
+  search: (query: string) => request<TripSearchResult[]>(`/search?q=${encodeURIComponent(query)}`),
+  tripPdfUrl: (vehicleId: string) => `${API_BASE}/trips/vehicles/${encodeURIComponent(vehicleId)}/pdf`
 };

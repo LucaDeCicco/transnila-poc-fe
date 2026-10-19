@@ -19,7 +19,23 @@ export interface Vehicle {
   formattedAddress: string | null; geocodedLatitude: number | null; geocodedLongitude: number | null;
   lastGeocodedAt: string | null; lastWialonSuccessAt: string | null; lastManualAttemptAt: string | null;
   warnings: Warning[]; hasWarning: boolean; attribution: string;
+  currentTrip: Trip | null;
 }
+export interface Trip {
+  id: string; vehicleId: string; status: Availability; orderNumber: string; externalReference: string | null; orderDate: string | null;
+  clientName: string; clientVat: string | null; clientAddress: string | null; clientContactName: string | null; clientContactEmail: string | null; clientContactPhone: string | null;
+  pickupCompany: string | null; pickupAddress: string; pickupCity: string | null; pickupPostcode: string | null; pickupCountry: string | null; pickupCountryCode: string | null; pickupLocalDate: string; pickupLocalTime: string; pickupTimeZone: string | null; pickupContactName: string | null; pickupContactPhone: string | null; pickupReference: string | null; pickupInstructions: string | null;
+  deliveryCompany: string | null; deliveryAddress: string; deliveryCity: string | null; deliveryPostcode: string | null; deliveryCountry: string | null; deliveryCountryCode: string | null; deliveryLocalDate: string; deliveryLocalTime: string; deliveryTimeZone: string | null; deliveryContactName: string | null; deliveryContactPhone: string | null; deliveryReference: string | null; deliveryInstructions: string | null;
+  cargoDescription: string | null; cargoQuantity: number | null; cargoPackageType: string | null; cargoDimensions: string | null; cargoWeightKg: number | null; cargoVolumeM3: number | null; cargoLoadingMeters: number | null; cargoPallets: number | null; cargoParcels: number | null; cargoDangerous: boolean | null; cargoStackable: boolean | null; cargoTemperatureC: number | null;
+  priceAmount: number; currency: string; vatRate: number | null; vatAmount: number | null; totalAmount: number | null; paymentTerms: string | null; invoicingInstructions: string | null; operationalInstructions: string | null; contractualNotes: string | null;
+  assignedDriverName: string | null; assignedDriverPhone: string | null; assignedRegistrationNumber: string;
+  pdfUrl: string | null; pdfPathname: string | null; pdfOriginalName: string | null; pdfContentType: string | null; pdfSize: number | null;
+  extraction: Record<string, unknown> | null; additionalData: unknown; createdAt: string; updatedAt: string;
+}
+export interface TripSearchResult { vehicleId: string; registrationNumber: string; driverName: string | null; orderNumber: string | null; externalReference: string | null; clientName: string | null; status: Availability | null }
+export interface BlobReference { blobUrl: string; pathname: string; originalName: string; contentType: string; size: number }
+export interface ExtractedField { value: string | null; confidence: number; sourceText: string | null }
+export interface ExtractionResult { fields: Record<string, ExtractedField>; additionalData: { label: string; value: string }[]; documentWarnings: string[]; usage?: unknown }
 export interface RefreshResponse {
   performed: boolean; success?: boolean; reason?: string; error?: string; nextAllowedAt?: string;
   retryAfter?: number; vehicle?: Vehicle; updated?: number; skipped?: unknown[]; failed?: unknown[];
