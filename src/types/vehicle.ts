@@ -20,6 +20,39 @@ export interface Vehicle {
   lastGeocodedAt: string | null; lastWialonSuccessAt: string | null; lastManualAttemptAt: string | null;
   warnings: Warning[]; hasWarning: boolean; attribution: string;
   currentTrip: Trip | null;
+  currentDriverId: string | null;
+  drivers: VehicleDriver[];
+}
+export interface VehicleDriver {
+  id: string; name: string; phoneCountryIso: string | null; phoneCountryCode: string | null;
+  phoneNumber: string | null; phoneE164: string | null; slot: number; isCurrent: boolean;
+}
+export type DriverActivityType = 'DRIVING' | 'OTHER_WORK' | 'AVAILABILITY' | 'BREAK_REST' | 'UNKNOWN';
+export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+export interface DriverHoursSnapshot {
+  canDriveNow: boolean; untilNextBreakMinutes: number; dailyDrivingRemainingMinutes: number;
+  weeklyDrivingRemainingMinutes: number; fortnightDrivingRemainingMinutes: number;
+  dailyRestDeadline: string | null; confidence: ConfidenceLevel; confidenceScore: number;
+  source: 'GPS_ESTIMATE' | 'MANAGER_CONFIRMATION' | 'TACHOGRAPH'; computedAt: string;
+}
+export interface Driver {
+  id: string; name: string; phoneCountryIso: string | null; phoneCountryCode: string | null;
+  phoneNumber: string | null; phoneE164: string | null; notes: string | null; isActive: boolean;
+  currentActivity: DriverActivityType | null; currentActivitySince: string | null;
+  activeAssignments: { vehicleId: string; slot: number; vehicle: Vehicle }[];
+  hoursSnapshot: DriverHoursSnapshot | null; openQuestions?: number;
+}
+export interface DriverQuestion {
+  id: string; driverId: string | null; vehicleId: string | null;
+  type: 'IS_ON_BREAK' | 'CAN_DRIVE_NOW' | 'REMAINING_TO_BREAK' | 'DAILY_REMAINING' | 'WHO_IS_DRIVING';
+  priority: 'INFO' | 'IMPORTANT' | 'URGENT'; title: string; detail: string;
+  context: Record<string, unknown> | null; expiresAt: string | null; createdAt: string;
+  driver: Pick<Driver, 'id' | 'name'> | null;
+  vehicle: Pick<Vehicle, 'id' | 'registrationNumber'> | null;
+}
+export interface DriverHoursOverview {
+  computedAt: string; drivers: Driver[]; questions: DriverQuestion[];
+  syncWarnings: { vehicleId: string; registrationNumber: string; message: string | null; at: string | null }[];
 }
 export interface Trip {
   id: string; vehicleId: string; status: Availability; orderNumber: string; externalReference: string | null; orderDate: string | null;

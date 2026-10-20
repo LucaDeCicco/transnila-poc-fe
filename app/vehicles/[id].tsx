@@ -3,19 +3,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { AppShell } from '@/components/app-shell';
-import { CountryPhoneField } from '@/components/country-phone-field';
 import { StatusBadge } from '@/components/fleet-ui';
 import { Button, colors, Field, Message, Row, Section, styles as ui } from '@/components/ui';
 import { VehicleMap } from '@/components/vehicle-map';
 import { api } from '@/lib/api';
 import { availability as availabilityText, availabilityLabels, bucharestDate, unspecified } from '@/lib/format';
-import { formatInternationalPhone, normalizeNationalPhone } from '@/lib/phone';
+import { formatInternationalPhone } from '@/lib/phone';
 import { positionAgeMinutes, vehicleIssues, vehicleLocation } from '@/lib/vehicle';
 import { Availability, MapConfig, RoutingMode, Vehicle, VehicleRoute } from '@/types/vehicle';
 
 type Tab = 'overview' | 'trip' | 'map' | 'operations' | 'profile' | 'diagnostics';
 type Editing = 'operations' | 'profile' | null;
-type Form = { driverName: string; phoneCountryIso: string; phoneNumber: string; tachograph: 'null' | 'true' | 'false'; vehicleModel: string; vehicleDetails: string; availability: Availability | 'null'; destination: string; routingMode: RoutingMode };
+type Form = { tachograph: 'null' | 'true' | 'false'; vehicleModel: string; vehicleDetails: string; availability: Availability | 'null'; destination: string; routingMode: RoutingMode };
 
 const tabs: { key: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'overview', label: 'Rezumat', icon: 'apps-outline' }, { key: 'trip', label: 'Cursa curentă', icon: 'document-text-outline' }, { key: 'map', label: 'Hartă și traseu', icon: 'map-outline' },
@@ -24,7 +23,6 @@ const tabs: { key: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] 
 ];
 const routingModeLabels: Record<RoutingMode, string> = { DRIVE: 'Autoturism', LIGHT_TRUCK: 'Autoutilitară', MEDIUM_TRUCK: 'Camion mediu', TRUCK: 'Camion', HEAVY_TRUCK: 'Camion greu' };
 const fromVehicle = (vehicle: Vehicle): Form => ({
-  driverName: vehicle.driverName ?? '', phoneCountryIso: vehicle.driverPhoneCountryIso ?? 'RO', phoneNumber: vehicle.driverPhoneNumber ?? '',
   tachograph: vehicle.hasTachograph === null ? 'null' : String(vehicle.hasTachograph) as 'true' | 'false', vehicleModel: vehicle.vehicleModel ?? '',
   vehicleDetails: vehicle.vehicleDetails ?? '', availability: vehicle.availability ?? 'null', destination: vehicle.destination ?? '', routingMode: vehicle.routingMode
 });
@@ -101,9 +99,7 @@ export default function VehicleScreen() {
       let payload: object;
       if (editing === 'operations') payload = { availability: form.availability === 'null' ? null : form.availability, destination: form.destination, routingMode: form.routingMode };
       else {
-        const normalizedPhone = form.phoneNumber.trim() ? normalizeNationalPhone(form.phoneNumber, form.phoneCountryIso) : null;
-        if (form.phoneNumber.trim() && !normalizedPhone) throw new Error('Numărul de telefon nu este valid pentru țara selectată.');
-        payload = { driverName: form.driverName, driverPhoneCountryIso: normalizedPhone ? form.phoneCountryIso : null, driverPhoneNumber: normalizedPhone, hasTachograph: form.tachograph === 'null' ? null : form.tachograph === 'true', vehicleModel: form.vehicleModel, vehicleDetails: form.vehicleDetails };
+        payload = { hasTachograph: form.tachograph === 'null' ? null : form.tachograph === 'true', vehicleModel: form.vehicleModel, vehicleDetails: form.vehicleDetails };
       }
       const next = await api.patch(vehicle.id, payload); updateVehicle(next); editingRef.current = null; setEditing(null); setMessage(editing === 'operations' ? 'Datele operaționale au fost salvate.' : 'Profilul vehiculului a fost salvat.');
       if (tab === 'map') void refreshMap();
@@ -138,7 +134,7 @@ export default function VehicleScreen() {
         {tab === 'trip' && <TripTab vehicle={vehicle} onCreate={() => router.push('/trips/new')} />}
         {tab === 'map' && <MapTab vehicle={vehicle} config={mapConfig} fleet={fleet} route={route} error={mapError} refreshing={mapRefreshing} lastUpdatedAt={lastMapUpdatedAt} onRefresh={() => void refreshMap()} onOpenVehicle={(vehicleId) => router.push(`/vehicles/${vehicleId}`)} />}
         {tab === 'operations' && <OperationsTab vehicle={vehicle} form={form} editing={editing === 'operations'} setForm={setForm} />}
-        {tab === 'profile' && <ProfileTab vehicle={vehicle} form={form} editing={editing === 'profile'} setForm={setForm} />}
+        {tab === 'profile' && <DriverProfileTab vehicle={vehicle} form={form} editing={editing === 'profile'} setForm={setForm} />}
         {tab === 'diagnostics' && <DiagnosticsTab vehicle={vehicle} issues={issues} onRefresh={() => void manualRefresh()} refreshing={refreshing} />}
         {editing && <View style={detail.stickyActions}><Button title={confirmTripRemoval ? 'Confirmă și salvează' : 'Salvează modificările'} onPress={() => void save()} disabled={saving} /><Button secondary title="Anulează" onPress={cancelEditing} /></View>}
       </ScrollView>
@@ -180,8 +176,27 @@ function OperationsTab({ vehicle, form, editing, setForm }: { vehicle: Vehicle; 
   return <Section title="Disponibilitate și destinație">{editing ? <><Choice label="Disponibilitate" value={form.availability} options={[['null', 'Nespecificat'], ...Object.entries(availabilityLabels)]} onChange={(availability) => setForm({ ...form, availability: availability as Form['availability'] })} /><Field label="Destinație" value={form.destination} onChangeText={(destination) => setForm({ ...form, destination })} maxLength={500} placeholder="Ex.: DE 60549 Frankfurt" /><Choice label="Profil de rutare" value={form.routingMode} options={Object.entries(routingModeLabels)} onChange={(routingMode) => setForm({ ...form, routingMode: routingMode as RoutingMode })} /><Text style={detail.hint}>După salvare, destinația va fi identificată când este folosită de hartă sau mesaj.</Text></> : <><Row label="Disponibilitate" value={availabilityText(vehicle.availability)} /><Row label="Destinație introdusă" value={unspecified(vehicle.destination)} /><Row label="Destinație identificată" value={unspecified(vehicle.destinationFormattedAddress)} /><Row label="Cod poștal destinație" value={unspecified(vehicle.destinationPostcode)} /><Row label="Profil de rutare" value={routingModeLabels[vehicle.routingMode]} />{vehicle.destinationGeocodingError && <Message error>{vehicle.destinationGeocodingError}</Message>}</>}</Section>;
 }
 
-function ProfileTab({ vehicle, form, editing, setForm }: { vehicle: Vehicle; form: Form; editing: boolean; setForm: (form: Form) => void }) {
-  return <Section title="Profilul vehiculului"><Row label="Număr de înmatriculare" value={vehicle.registrationNumber} /><Row label="Stare Wialon" value={vehicle.isActive ? 'Activ' : 'Inactiv'} />{editing ? <><Field label="Șofer" value={form.driverName} onChangeText={(driverName) => setForm({ ...form, driverName })} maxLength={120} /><CountryPhoneField countryIso={form.phoneCountryIso} phoneNumber={form.phoneNumber} onCountryChange={(phoneCountryIso) => setForm({ ...form, phoneCountryIso })} onPhoneChange={(phoneNumber) => setForm({ ...form, phoneNumber })} /><Choice label="Tahograf" value={form.tachograph} options={[['null', 'Nespecificat'], ['true', 'Da'], ['false', 'Nu']]} onChange={(tachograph) => setForm({ ...form, tachograph: tachograph as Form['tachograph'] })} /><Field label="Model" value={form.vehicleModel} onChangeText={(vehicleModel) => setForm({ ...form, vehicleModel })} maxLength={120} /><Field label="Detalii vehicul" multiline value={form.vehicleDetails} onChangeText={(vehicleDetails) => setForm({ ...form, vehicleDetails })} maxLength={4000} /></> : <><Row label="Șofer" value={unspecified(vehicle.driverName)} /><Row label="Telefon" value={formatInternationalPhone(vehicle.driverPhoneE164)} /><Row label="Tahograf" value={vehicle.hasTachograph === null ? 'Nespecificat' : vehicle.hasTachograph ? 'Da' : 'Nu'} /><Row label="Model" value={unspecified(vehicle.vehicleModel)} /><Row label="Detalii vehicul" value={unspecified(vehicle.vehicleDetails)} />{vehicle.driverPhoneE164 && <View style={detail.quickActions}><Button title="Sună" onPress={() => void Linking.openURL(`tel:${vehicle.driverPhoneE164}`)} /><Button secondary title="Deschide WhatsApp" onPress={() => void Linking.openURL(`https://wa.me/${vehicle.driverPhoneE164!.replace(/\D/g, '')}`)} /></View>}</>}</Section>;
+function DriverProfileTab({ vehicle, form, editing, setForm }: { vehicle: Vehicle; form: Form; editing: boolean; setForm: (form: Form) => void }) {
+  const router = useRouter();
+  return <Section title="Profilul vehiculului">
+    <Row label="Număr de înmatriculare" value={vehicle.registrationNumber} />
+    <Row label="Stare Wialon" value={vehicle.isActive ? 'Activ' : 'Inactiv'} />
+    {editing ? <>
+      <Choice label="Tahograf" value={form.tachograph} options={[["null", "Nespecificat"], ["true", "Da"], ["false", "Nu"]]} onChange={(tachograph) => setForm({ ...form, tachograph: tachograph as Form['tachograph'] })} />
+      <Field label="Model" value={form.vehicleModel} onChangeText={(vehicleModel) => setForm({ ...form, vehicleModel })} maxLength={120} />
+      <Field label="Detalii vehicul" multiline value={form.vehicleDetails} onChangeText={(vehicleDetails) => setForm({ ...form, vehicleDetails })} maxLength={4000} />
+    </> : <>
+      <Row label="Șoferi asignați" value={vehicle.drivers?.map((driver) => `${driver.name}${driver.isCurrent ? ' (conduce acum)' : ''}`).join(' / ') || 'Nespecificat'} />
+      <Row label="Telefon șofer curent" value={formatInternationalPhone(vehicle.driverPhoneE164)} />
+      <Row label="Tahograf" value={vehicle.hasTachograph === null ? 'Nespecificat' : vehicle.hasTachograph ? 'Da' : 'Nu'} />
+      <Row label="Model" value={unspecified(vehicle.vehicleModel)} />
+      <Row label="Detalii vehicul" value={unspecified(vehicle.vehicleDetails)} />
+      <View style={detail.quickActions}>
+        <Button secondary title="Gestionează șoferii" onPress={() => router.push('/drivers')} />
+        {vehicle.driverPhoneE164 && <><Button title="Sună" onPress={() => void Linking.openURL(`tel:${vehicle.driverPhoneE164}`)} /><Button secondary title="Deschide WhatsApp" onPress={() => void Linking.openURL(`https://wa.me/${vehicle.driverPhoneE164!.replace(/\D/g, '')}`)} /></>}
+      </View>
+    </>}
+  </Section>;
 }
 
 function DiagnosticsTab({ vehicle, issues, onRefresh, refreshing }: { vehicle: Vehicle; issues: ReturnType<typeof vehicleIssues>; onRefresh: () => void; refreshing: boolean }) {

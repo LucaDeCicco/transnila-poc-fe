@@ -1,4 +1,4 @@
-import { AvailabilityMessageResponse, BlobReference, ExtractionResult, FleetRefreshStatus, LiveFleetResponse, MapConfig, RefreshResponse, TripSearchResult, Vehicle, VehicleRoute } from '../types/vehicle';
+import { AvailabilityMessageResponse, BlobReference, Driver, DriverHoursOverview, DriverQuestion, ExtractionResult, FleetRefreshStatus, LiveFleetResponse, MapConfig, RefreshResponse, TripSearchResult, Vehicle, VehicleRoute } from '../types/vehicle';
 
 export const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
 if (!API_BASE) console.warn('EXPO_PUBLIC_API_BASE_URL nu este configurat.');
@@ -36,4 +36,14 @@ export const api = {
   assignTrip: (vehicleId: string, data: object) => request<Vehicle>(`/trips/vehicles/${encodeURIComponent(vehicleId)}`, { method: 'PUT', body: JSON.stringify(data) }),
   search: (query: string) => request<TripSearchResult[]>(`/search?q=${encodeURIComponent(query)}`),
   tripPdfUrl: (vehicleId: string) => `${API_BASE}/trips/vehicles/${encodeURIComponent(vehicleId)}/pdf`
+  ,drivers: (activeOnly = true) => request<Driver[]>(`/drivers?activeOnly=${activeOnly}`),
+  createDriver: (data: object) => request<Driver>('/drivers', { method: 'POST', body: JSON.stringify(data) }),
+  updateDriver: (id: string, data: object) => request<Driver>(`/drivers/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  assignDrivers: (vehicleId: string, data: { driverIds: string[]; currentDriverId?: string | null }) => request<Vehicle>(`/vehicles/${encodeURIComponent(vehicleId)}/drivers`, { method: 'PATCH', body: JSON.stringify(data) }),
+  driverHours: (sync = true) => request<DriverHoursOverview>(`/driver-hours?sync=${sync}`),
+  syncDriverHours: () => request<DriverHoursOverview>('/driver-hours/sync', { method: 'POST' }),
+  driverQuestions: () => request<DriverQuestion[]>('/driver-hours/questions'),
+  answerDriverQuestion: (id: string, answer: unknown) => request<{ ok: boolean }>(`/driver-hours/questions/${encodeURIComponent(id)}/answer`, { method: 'POST', body: JSON.stringify({ answer }) }),
+  calibrateDriver: (id: string, data: object) => request(`/driver-hours/drivers/${encodeURIComponent(id)}/calibration`, { method: 'POST', body: JSON.stringify(data) }),
+  clearDriverCalibration: (id: string) => request(`/driver-hours/drivers/${encodeURIComponent(id)}/calibration`, { method: 'DELETE' })
 };

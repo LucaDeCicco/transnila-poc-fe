@@ -7,13 +7,15 @@ import { api } from '@/lib/api';
 import { TripSearchResult } from '@/types/vehicle';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
-export type AppSection = 'operations' | 'map' | 'vehicles' | 'availability' | 'attention';
+export type AppSection = 'operations' | 'map' | 'vehicles' | 'availability' | 'hours' | 'drivers' | 'attention';
 
-const navigation: { key: AppSection; label: string; compactLabel?: string; icon: IconName; route: Href }[] = [
+const navigation: { key: AppSection; label: string; compactLabel?: string; icon: IconName; route: Href; mobile?: boolean }[] = [
   { key: 'operations', label: 'Operațiuni', icon: 'grid-outline', route: '/' },
   { key: 'map', label: 'Hartă', icon: 'map-outline', route: '/map' },
   { key: 'vehicles', label: 'Vehicule', icon: 'car-outline', route: '/vehicles' },
-  { key: 'availability', label: 'Mesaj', icon: 'chatbubble-ellipses-outline', route: '/availability' },
+  { key: 'hours', label: 'Program șoferi', compactLabel: 'Program', icon: 'time-outline', route: '/driver-hours' },
+  { key: 'drivers', label: 'Șoferi', icon: 'people-outline', route: '/drivers', mobile: false },
+  { key: 'availability', label: 'Mesaj', icon: 'chatbubble-ellipses-outline', route: '/availability', mobile: false },
   { key: 'attention', label: 'Necesită atenție', compactLabel: 'Mai mult', icon: 'ellipsis-horizontal-circle-outline', route: '/attention' }
 ];
 
@@ -48,7 +50,7 @@ export function AppShell({ active, title, subtitle, action, back, children }: Pr
       </View>
       <GlobalTools desktop={desktop} onNew={() => navigate('/trips/new')} onOpen={(id) => navigate(`/vehicles/${id}`)} />
       <View style={[shell.body, !desktop && shell.mobileBody]}>{children}</View>
-      {!desktop && <View style={shell.bottomNav}>{navigation.map((item) => {
+      {!desktop && <View style={shell.bottomNav}>{navigation.filter((item) => item.mobile !== false).map((item) => {
         const selected = active === item.key;
         return <Pressable key={item.key} accessibilityRole="button" onPress={() => navigate(item.route)} style={({ pressed }) => [shell.bottomItem, pressed && shell.pressed]}>
           <View style={[shell.bottomIcon, selected && shell.bottomIconActive]}><Ionicons name={item.icon} size={21} color={selected ? '#fff' : colors.muted} /></View>
