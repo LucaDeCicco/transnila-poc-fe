@@ -11,6 +11,8 @@ export interface Vehicle {
   destinationFormattedAddress: string | null; destinationCountry: string | null; destinationCountryCode: string | null;
   destinationCity: string | null; destinationPostcode: string | null; destinationGeocodingConfidence: number | null;
   destinationGeocodedAt: string | null; destinationGeocodingError: string | null; destinationGeocodingErrorAt: string | null;
+  isAvailableSoon: boolean; availableSoonStraightLineDistanceMeters: number | null;
+  availableSoonRoadDistanceMeters: number | null; availableSoonRouteCalculatedAt: string | null;
   latitude: number | null; longitude: number | null; speedKph: number | null; positionAt: string | null;
   courseDegrees: number | null; altitudeMeters: number | null; satellites: number | null;
   lastMessageAt: string | null; lastMessageReceivedAt: string | null; trackerParams: Record<string, unknown> | null;
@@ -95,4 +97,6 @@ export interface AvailabilityMessageVehicle {
   reason: string | null;
   locationSource: 'destination' | 'current';
   location: string | null;
+  isAvailableSoon: boolean;
+  availableSoonRoadDistanceMeters: number | null;
 }

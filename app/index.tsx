@@ -11,7 +11,7 @@ import { bucharestDate, unspecified } from '@/lib/format';
 import { normalizeRegistration, positionAgeMinutes, statusTone, tachograph, vehicleIssues, vehicleLocation } from '@/lib/vehicle';
 import { Availability, AvailabilityMessageResponse, MapConfig, Vehicle } from '@/types/vehicle';
 
-type StatusFilter = 'ALL' | Availability | 'UNSPECIFIED' | 'ATTENTION';
+type StatusFilter = 'ALL' | Availability | 'AVAILABLE_SOON' | 'UNSPECIFIED' | 'ATTENTION';
 
 export default function OperationsScreen() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -73,6 +73,7 @@ export default function OperationsScreen() {
   const metrics = useMemo(() => ({
     all: vehicles.length,
     available: vehicles.filter((item) => item.availability === 'AVAILABLE').length,
+    availableSoon: vehicles.filter((item) => item.isAvailableSoon).length,
     pickup: vehicles.filter((item) => item.availability === 'HEADING_TO_PICKUP').length,
     trip: vehicles.filter((item) => item.availability === 'ON_TRIP').length,
     attention: vehicles.filter((item) => vehicleIssues(item, staleMinutes).some((issue) => issue.severity === 'attention')).length
@@ -83,7 +84,9 @@ export default function OperationsScreen() {
     if (search && !normalizeRegistration(vehicle.registrationNumber).includes(normalizeRegistration(search))) return false;
     if (statusFilter === 'ATTENTION' && !vehicleIssues(vehicle, staleMinutes).some((issue) => issue.severity === 'attention')) return false;
     if (statusFilter === 'UNSPECIFIED' && vehicle.availability !== null) return false;
-    if (statusFilter !== 'ALL' && statusFilter !== 'ATTENTION' && statusFilter !== 'UNSPECIFIED' && vehicle.availability !== statusFilter) return false;
+    if (statusFilter === 'AVAILABLE' && vehicle.availability !== 'AVAILABLE' && !vehicle.isAvailableSoon) return false;
+    if (statusFilter === 'AVAILABLE_SOON' && !vehicle.isAvailableSoon) return false;
+    if (statusFilter !== 'ALL' && statusFilter !== 'ATTENTION' && statusFilter !== 'UNSPECIFIED' && statusFilter !== 'AVAILABLE' && statusFilter !== 'AVAILABLE_SOON' && vehicle.availability !== statusFilter) return false;
     if (modelFilter && vehicle.vehicleModel?.toLocaleLowerCase('ro-RO') !== modelFilter.toLocaleLowerCase('ro-RO')) return false;
     if (countryFilter && vehicle.country !== countryFilter) return false;
     if (tachographFilter === 'yes' && vehicle.hasTachograph !== true) return false;
@@ -102,6 +105,7 @@ export default function OperationsScreen() {
     <View style={screen.metrics}>
       <MetricCard label="Vehicule active" value={metrics.all} tone={colors.accent} active={statusFilter === 'ALL'} onPress={() => setStatusFilter('ALL')} icon={<Ionicons name="car-sport-outline" size={20} color={colors.accent} />} />
       <MetricCard label="Disponibile" value={metrics.available} tone={colors.success} active={statusFilter === 'AVAILABLE'} onPress={() => setStatusFilter('AVAILABLE')} icon={<Ionicons name="checkmark-circle-outline" size={20} color={colors.success} />} />
+      <MetricCard label="Disponibile în curând" value={metrics.availableSoon} tone={colors.yellow} active={statusFilter === 'AVAILABLE_SOON'} onPress={() => setStatusFilter('AVAILABLE_SOON')} icon={<Ionicons name="warning-outline" size={20} color={colors.yellow} />} />
       <MetricCard label="Către preluare" value={metrics.pickup} tone={colors.orange} active={statusFilter === 'HEADING_TO_PICKUP'} onPress={() => setStatusFilter('HEADING_TO_PICKUP')} icon={<Ionicons name="navigate-outline" size={20} color={colors.orange} />} />
       <MetricCard label="În cursă" value={metrics.trip} tone="#60a5fa" active={statusFilter === 'ON_TRIP'} onPress={() => setStatusFilter('ON_TRIP')} icon={<Ionicons name="trail-sign-outline" size={20} color="#60a5fa" />} />
       <MetricCard label="Necesită atenție" value={metrics.attention} tone={colors.danger} active={statusFilter === 'ATTENTION'} onPress={() => setStatusFilter('ATTENTION')} icon={<Ionicons name="warning-outline" size={20} color={colors.danger} />} />
@@ -114,7 +118,8 @@ export default function OperationsScreen() {
     <View style={screen.tools}><SearchField value={search} onChange={setSearch} /><Pressable onPress={() => setShowFilters((value) => !value)} style={[screen.filterButton, (showFilters || hasAdvancedFilters) && screen.filterButtonActive]}><Ionicons name="options-outline" size={20} color={colors.text} /><Text style={screen.filterButtonText}>Filtre{hasAdvancedFilters ? ' active' : ''}</Text></Pressable></View>
     <View style={screen.chips}>
       <FilterChip label="Toate" active={statusFilter === 'ALL'} count={metrics.all} onPress={() => setStatusFilter('ALL')} />
-      <FilterChip label="Disponibile" active={statusFilter === 'AVAILABLE'} count={metrics.available} onPress={() => setStatusFilter('AVAILABLE')} />
+      <FilterChip label="Disponibile" active={statusFilter === 'AVAILABLE'} count={metrics.available + metrics.availableSoon} onPress={() => setStatusFilter('AVAILABLE')} />
+      <FilterChip label="În curând" active={statusFilter === 'AVAILABLE_SOON'} count={metrics.availableSoon} onPress={() => setStatusFilter('AVAILABLE_SOON')} />
       <FilterChip label="Către preluare" active={statusFilter === 'HEADING_TO_PICKUP'} count={metrics.pickup} onPress={() => setStatusFilter('HEADING_TO_PICKUP')} />
       <FilterChip label="În cursă" active={statusFilter === 'ON_TRIP'} count={metrics.trip} onPress={() => setStatusFilter('ON_TRIP')} />
       <FilterChip label="Nespecificat" active={statusFilter === 'UNSPECIFIED'} onPress={() => setStatusFilter('UNSPECIFIED')} />
@@ -144,7 +149,7 @@ function FilterGroup({ label, children }: { label: string; children: React.React
 }
 
 function VehicleRow({ vehicle, desktop, staleMinutes, onOpen, onEdit }: { vehicle: Vehicle; desktop: boolean; staleMinutes: number; onOpen: () => void; onEdit: () => void }) {
-  const tone = statusTone(vehicle.availability);
+  const tone = vehicle.isAvailableSoon ? { ...statusTone(vehicle.availability), accent: colors.yellow } : statusTone(vehicle.availability);
   const issues = vehicleIssues(vehicle, staleMinutes);
   const attention = issues.filter((issue) => issue.severity === 'attention').length;
   const age = positionAgeMinutes(vehicle);
@@ -153,18 +158,24 @@ function VehicleRow({ vehicle, desktop, staleMinutes, onOpen, onEdit }: { vehicl
     {desktop ? <>
       <View style={screen.colPlate}><View style={screen.plateLine}><Text style={screen.plate}>{vehicle.registrationNumber}</Text>{attention > 0 && <Ionicons name="warning" size={16} color={colors.yellow} />}</View><Text numberOfLines={1} style={screen.mini}>{vehicle.vehicleModel ?? 'Model nespecificat'}</Text></View>
       <Text numberOfLines={2} style={screen.colDriver}>{unspecified(vehicle.driverName)}</Text>
-      <View style={screen.colStatus}><StatusBadge value={vehicle.availability} compact /></View>
+      <View style={[screen.colStatus, screen.statusStack]}><StatusBadge value={vehicle.availability} compact />{vehicle.isAvailableSoon && <AvailableSoonBadge vehicle={vehicle} />}</View>
       <Text style={screen.colTacho}>{tachograph(vehicle.hasTachograph)}</Text>
       <Text numberOfLines={2} style={screen.colLocation}>{vehicleLocation(vehicle) || 'Nespecificat'}</Text>
       <Text numberOfLines={2} style={screen.colDestination}>{unspecified(vehicle.destination)}</Text>
       <View style={screen.colUpdated}><Text style={[screen.age, attention > 0 && { color: colors.yellow }]}>{ageText}</Text></View>
       <View style={screen.colAction}><Pressable accessibilityLabel={`Actualizează ${vehicle.registrationNumber}`} onPress={(event) => { event.stopPropagation(); onEdit(); }} style={screen.rowAction}><Ionicons name="create-outline" size={19} color={colors.text} /></Pressable></View>
     </> : <>
-      <View style={screen.mobileTop}><View style={{ flex: 1, minWidth: 0 }}><View style={screen.plateLine}><Text style={screen.plate}>{vehicle.registrationNumber}</Text>{attention > 0 && <Ionicons name="warning" size={17} color={colors.yellow} />}</View><Text style={screen.mini}>{vehicle.vehicleModel ?? 'Model nespecificat'} · {unspecified(vehicle.driverName)}</Text></View><StatusBadge value={vehicle.availability} compact /></View>
+      <View style={screen.mobileTop}><View style={{ flex: 1, minWidth: 0 }}><View style={screen.plateLine}><Text style={screen.plate}>{vehicle.registrationNumber}</Text>{attention > 0 && <Ionicons name="warning" size={17} color={colors.yellow} />}</View><Text style={screen.mini}>{vehicle.vehicleModel ?? 'Model nespecificat'} · {unspecified(vehicle.driverName)}</Text></View><View style={screen.statusStack}><StatusBadge value={vehicle.availability} compact />{vehicle.isAvailableSoon && <AvailableSoonBadge vehicle={vehicle} />}</View></View>
       <View style={screen.mobileGrid}><MobileDatum icon="location-outline" value={vehicleLocation(vehicle) || 'Locație nespecificată'} /><MobileDatum icon="flag-outline" value={`Destinație: ${unspecified(vehicle.destination)}`} /><MobileDatum icon="speedometer-outline" value={`Tahograf: ${tachograph(vehicle.hasTachograph)}`} /><MobileDatum icon="time-outline" value={`Poziție: ${ageText}`} warning={attention > 0} /></View>
       <View style={screen.mobileActions}><Pressable onPress={(event) => { event.stopPropagation(); onEdit(); }} style={screen.quickAction}><Ionicons name="create-outline" size={18} color={colors.text} /><Text style={screen.quickActionText}>Status și destinație</Text></Pressable><Text style={screen.openText}>Vezi detalii →</Text></View>
     </>}
   </Pressable>;
+}
+
+function AvailableSoonBadge({ vehicle }: { vehicle: Vehicle }) {
+  const distance = vehicle.availableSoonRoadDistanceMeters === null
+    ? null : Math.round(vehicle.availableSoonRoadDistanceMeters / 1000);
+  return <View style={screen.availableSoonBadge}><Ionicons name="warning" size={13} color="#1f1600" /><Text style={screen.availableSoonText}>Disponibilă în curând{distance === null ? '' : ` · ${distance} km`}</Text></View>;
 }
 
 function MobileDatum({ icon, value, warning }: { icon: keyof typeof Ionicons.glyphMap; value: string; warning?: boolean }) {
@@ -182,5 +193,6 @@ const screen = StyleSheet.create({
   tableHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 5 }, vehicle: { backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 5, borderRadius: 13, padding: 14, gap: 12 }, vehicleDesktop: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 0, borderRadius: 9, paddingVertical: 10 },
   colPlate: { flex: 1.15, minWidth: 0, paddingRight: 8, color: colors.muted, fontSize: 11, fontWeight: '800' }, colDriver: { flex: 1, minWidth: 0, paddingRight: 8, color: colors.text, fontSize: 13 }, colStatus: { flex: 1.25, minWidth: 0, paddingRight: 8, color: colors.muted, fontSize: 11, fontWeight: '800' }, colTacho: { flex: .7, minWidth: 0, paddingRight: 8, color: colors.text, fontSize: 13 }, colLocation: { flex: 1.35, minWidth: 0, paddingRight: 8, color: colors.text, fontSize: 13 }, colDestination: { flex: 1.3, minWidth: 0, paddingRight: 8, color: colors.text, fontSize: 13 }, colUpdated: { flex: .72, minWidth: 0, paddingRight: 8, color: colors.muted, fontSize: 11, fontWeight: '800' }, colAction: { width: 42, alignItems: 'flex-end' },
   plateLine: { flexDirection: 'row', alignItems: 'center', gap: 7 }, plate: { color: colors.text, fontWeight: '900', fontSize: 16 }, mini: { color: colors.muted, fontSize: 11, marginTop: 3 }, age: { color: colors.muted, fontWeight: '800', fontSize: 12 }, rowAction: { width: 38, height: 38, borderRadius: 9, backgroundColor: colors.panel2, alignItems: 'center', justifyContent: 'center' },
+  statusStack: { alignItems: 'flex-start', gap: 5 }, availableSoonBadge: { maxWidth: '100%', flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, backgroundColor: colors.yellow }, availableSoonText: { color: '#1f1600', fontWeight: '900', fontSize: 10 },
   mobileTop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: 10 }, mobileGrid: { gap: 7 }, mobileDatum: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 }, mobileDatumText: { flex: 1, minWidth: 0, color: colors.muted, fontSize: 13, lineHeight: 18 }, mobileActions: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, quickAction: { minHeight: 40, borderRadius: 9, backgroundColor: colors.panel2, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 7 }, quickActionText: { color: colors.text, fontWeight: '800', fontSize: 12 }, openText: { color: '#93c5fd', fontWeight: '800', fontSize: 12 }
 });
