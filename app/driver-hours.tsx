@@ -14,6 +14,10 @@ const minutes = (value?: number | null) => {
   return hours ? `${hours} h ${rest} min` : `${rest} min`;
 };
 const confidence = { HIGH: 'Ridicată', MEDIUM: 'Medie', LOW: 'Scăzută' } as const;
+const operationalLabels = {
+  DRIVING: 'Conduce acum', BREAK_REST: 'În pauză', STOPPED_UNKNOWN: 'Oprit · activitate neclară',
+  OTHER_WORK: 'Altă muncă', AVAILABILITY: 'Disponibilitate', INSUFFICIENT_DATA: 'Date GPS insuficiente'
+} as const;
 type Calibration = { untilBreak: string; daily: string; weekly: string; fortnight: string; deadline: string; canDrive: boolean };
 
 export default function DriverHoursScreen() {
@@ -116,10 +120,26 @@ export default function DriverHoursScreen() {
 function DriverCard({ driver, onCalibrate, onOpenVehicle }: { driver: Driver; onCalibrate: () => void; onOpenVehicle: (id: string) => void }) {
   const snapshot = driver.hoursSnapshot;
   const assignment = driver.activeAssignments?.[0];
+  const operational = driver.operationalState;
+  const eligibility = driver.drivingEligibility;
   const confidenceColor = snapshot?.confidence === 'HIGH' ? colors.success : snapshot?.confidence === 'MEDIUM' ? colors.orange : colors.danger;
+  const eligibilityText = eligibility?.status === 'NOW' ? 'POATE CONDUCE ACUM'
+    : eligibility?.status === 'LATER' ? `POATE CONDUCE PESTE ${minutes(eligibility.canDriveInMinutes)}`
+      : 'NECESITĂ CONFIRMARE';
+  const eligibilityColor = eligibility?.status === 'NOW' ? '#12583f'
+    : eligibility?.status === 'LATER' ? '#735a17' : '#42516a';
+  const operationalColor = operational?.status === 'DRIVING' ? '#234f88'
+    : operational?.status === 'BREAK_REST' ? '#12583f'
+      : operational?.status === 'INSUFFICIENT_DATA' ? '#42516a' : '#735a17';
+  const canDriveValue = eligibility?.status === 'NOW' ? 'Acum'
+    : eligibility?.status === 'LATER'
+      ? `${minutes(eligibility.canDriveInMinutes)} · ${eligibility.canDriveAt ? bucharestDate(eligibility.canDriveAt) : ''}`
+      : 'Necesită confirmarea situației curente';
   return <View style={page.card}>
-    <View style={page.cardTop}><View style={{ flex: 1, minWidth: 0 }}><Text style={page.driverName}>{driver.name}</Text><Pressable disabled={!assignment} onPress={() => assignment && onOpenVehicle(assignment.vehicleId)}><Text style={page.vehicleLink}>{assignment?.vehicle.registrationNumber ?? 'Neasignat unui vehicul'}</Text></Pressable></View><View style={[page.canDrive, { backgroundColor: snapshot?.canDriveNow ? '#12583f' : '#662530' }]}><Text style={page.canDriveText}>{snapshot?.canDriveNow ? 'POATE CONDUCE' : 'NU POATE CONDUCE'}</Text></View></View>
+    <View style={page.cardTop}><View style={{ flex: 1, minWidth: 0 }}><Text style={page.driverName}>{driver.name}</Text><Pressable disabled={!assignment} onPress={() => assignment && onOpenVehicle(assignment.vehicleId)}><Text style={page.vehicleLink}>{assignment?.vehicle.registrationNumber ?? 'Neasignat unui vehicul'}</Text></Pressable></View><View style={page.cardBadges}><View style={[page.canDrive, { backgroundColor: operationalColor }]}><Text style={page.canDriveText}>{operational ? operationalLabels[operational.status].toUpperCase() : 'STARE NECUNOSCUTĂ'}</Text></View><View style={[page.canDrive, { backgroundColor: eligibilityColor }]}><Text style={page.canDriveText}>{eligibilityText}</Text></View></View></View>
     {snapshot ? <>
+      <Metric icon="navigate-outline" label="Stare actuală estimată" value={operational ? operationalLabels[operational.status] : 'Necunoscută'} />
+      <Metric icon="time-outline" label="Când poate conduce" value={canDriveValue} />
       <Metric icon="cafe-outline" label="Până la pauza de 45 min" value={minutes(snapshot.untilNextBreakMinutes)} />
       <Metric icon="today-outline" label="Condus disponibil astăzi" value={minutes(snapshot.dailyDrivingRemainingMinutes)} />
       <Metric icon="calendar-outline" label="Disponibil săptămâna aceasta" value={minutes(snapshot.weeklyDrivingRemainingMinutes)} />
@@ -146,7 +166,7 @@ const page = StyleSheet.create({
   notice: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 13, borderRadius: 12, borderWidth: 1, borderColor: '#254d7e', backgroundColor: '#10243d' }, noticeText: { flex: 1, color: '#bdcbe0', lineHeight: 19, fontSize: 12 },
   questions: { gap: 10, padding: 15, borderRadius: 14, borderWidth: 1, borderColor: '#705616', backgroundColor: '#2d2510' }, sectionHead: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, sectionTitle: { color: colors.text, fontSize: 19, fontWeight: '900' }, sectionSub: { color: colors.muted, fontSize: 12, marginTop: 3 }, count: { minWidth: 30, height: 30, borderRadius: 15, backgroundColor: colors.orange, alignItems: 'center', justifyContent: 'center' }, countText: { color: '#111827', fontWeight: '900' },
   question: { padding: 13, borderRadius: 11, backgroundColor: '#3a3014', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 }, questionUrgent: { borderWidth: 1, borderColor: colors.danger }, questionTitle: { color: colors.text, fontWeight: '900' }, questionDetail: { color: '#d6cba9', fontSize: 12, marginTop: 4, lineHeight: 17 }, questionActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, answer: { minHeight: 38, paddingHorizontal: 14, borderRadius: 9, backgroundColor: '#735a17', alignItems: 'center', justifyContent: 'center' }, answerText: { color: '#fff', fontWeight: '900' },
-  manage: { flexDirection: 'row', alignItems: 'center', gap: 7, padding: 10 }, manageText: { color: '#93c5fd', fontWeight: '800', fontSize: 12 }, grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 }, gridMobile: { flexDirection: 'column' }, card: { flexGrow: 1, flexBasis: 390, maxWidth: 600, gap: 11, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.panel }, cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 }, driverName: { color: colors.text, fontSize: 19, fontWeight: '900' }, vehicleLink: { color: '#93c5fd', fontSize: 12, fontWeight: '800', marginTop: 3 }, canDrive: { paddingHorizontal: 9, paddingVertical: 6, borderRadius: 8 }, canDriveText: { color: '#fff', fontSize: 9, fontWeight: '900' },
+  manage: { flexDirection: 'row', alignItems: 'center', gap: 7, padding: 10 }, manageText: { color: '#93c5fd', fontWeight: '800', fontSize: 12 }, grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 }, gridMobile: { flexDirection: 'column' }, card: { flexGrow: 1, flexBasis: 390, maxWidth: 600, gap: 11, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.panel }, cardTop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: 10 }, cardBadges: { alignItems: 'flex-end', gap: 5, maxWidth: '58%' }, driverName: { color: colors.text, fontSize: 19, fontWeight: '900' }, vehicleLink: { color: '#93c5fd', fontSize: 12, fontWeight: '800', marginTop: 3 }, canDrive: { paddingHorizontal: 9, paddingVertical: 6, borderRadius: 8, maxWidth: '100%' }, canDriveText: { color: '#fff', fontSize: 9, fontWeight: '900', textAlign: 'center' },
   metric: { flexDirection: 'row', gap: 10, alignItems: 'center', paddingVertical: 5 }, metricIcon: { width: 34, height: 34, borderRadius: 9, backgroundColor: '#173354', alignItems: 'center', justifyContent: 'center' }, metricLabel: { color: colors.muted, fontSize: 10, fontWeight: '800', textTransform: 'uppercase' }, metricValue: { color: colors.text, fontWeight: '800', marginTop: 2 }, confidence: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingTop: 7, borderTopWidth: 1, borderTopColor: colors.border }, dot: { width: 8, height: 8, borderRadius: 4 }, confidenceText: { color: colors.muted, fontSize: 11 }, noData: { color: colors.muted, lineHeight: 19 }, empty: { alignItems: 'center', gap: 14, padding: 30 }, emptyText: { color: colors.muted, maxWidth: 480, textAlign: 'center', lineHeight: 20 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.76)', justifyContent: 'center', padding: 14 }, modal: { width: '100%', maxWidth: 650, maxHeight: '92%', alignSelf: 'center', borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.panel }, modalBody: { padding: 18, gap: 14 }, modalTitle: { color: colors.text, fontSize: 21, fontWeight: '900' }, toggle: { gap: 7 }, toggleLabel: { color: colors.muted, fontSize: 12, fontWeight: '800', textTransform: 'uppercase' }, toggleActions: { flexDirection: 'row', gap: 8 }, choice: { minWidth: 72, padding: 11, borderRadius: 9, borderWidth: 1, borderColor: colors.border, alignItems: 'center' }, choiceActive: { backgroundColor: colors.accent, borderColor: colors.accent }, choiceText: { color: colors.text, fontWeight: '900' }
 });

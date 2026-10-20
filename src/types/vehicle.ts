@@ -35,12 +35,22 @@ export interface DriverHoursSnapshot {
   dailyRestDeadline: string | null; confidence: ConfidenceLevel; confidenceScore: number;
   source: 'GPS_ESTIMATE' | 'MANAGER_CONFIRMATION' | 'TACHOGRAPH'; computedAt: string;
 }
+export interface DriverOperationalState {
+  status: 'DRIVING' | 'BREAK_REST' | 'STOPPED_UNKNOWN' | 'OTHER_WORK' | 'AVAILABILITY' | 'INSUFFICIENT_DATA';
+  since: string | null; observedAt: string | null; confidence: ConfidenceLevel; confidenceScore: number;
+  source: 'GPS_ESTIMATE' | 'MANAGER_CONFIRMATION' | 'TACHOGRAPH';
+}
+export interface DriverDrivingEligibility {
+  status: 'NOW' | 'LATER' | 'CONFIRMATION_REQUIRED';
+  canDriveAt: string | null; canDriveInMinutes: number | null;
+}
 export interface Driver {
   id: string; name: string; phoneCountryIso: string | null; phoneCountryCode: string | null;
   phoneNumber: string | null; phoneE164: string | null; notes: string | null; isActive: boolean;
   currentActivity: DriverActivityType | null; currentActivitySince: string | null;
   activeAssignments: { vehicleId: string; slot: number; vehicle: Vehicle }[];
   hoursSnapshot: DriverHoursSnapshot | null; openQuestions?: number;
+  operationalState?: DriverOperationalState; drivingEligibility?: DriverDrivingEligibility;
 }
 export interface DriverQuestion {
   id: string; driverId: string | null; vehicleId: string | null;
