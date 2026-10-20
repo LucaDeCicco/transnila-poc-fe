@@ -64,6 +64,21 @@ export interface VehicleRoute {
   destination?: { latitude: number; longitude: number; formattedAddress: string };
   distanceMeters?: number | null; durationSeconds?: number | null; routingMode?: RoutingMode;
 }
+export interface VehicleTripHistoryEvent {
+  type: 'TRIP'; startedAt: string; endedAt: string; durationSeconds: number;
+  startAddress: string | null; endAddress: string | null;
+  startLatitude: number | null; startLongitude: number | null; endLatitude: number | null; endLongitude: number | null;
+  distanceKm: number | null; maxSpeedKph: number | null;
+}
+export interface VehicleParkingHistoryEvent {
+  type: 'PARKING'; startedAt: string; endedAt: string; durationSeconds: number;
+  address: string | null; latitude: number | null; longitude: number | null; engineOnSeconds: number;
+}
+export type VehicleHistoryEvent = VehicleTripHistoryEvent | VehicleParkingHistoryEvent;
+export interface VehicleHistory {
+  vehicleId: string; registrationNumber: string; date: string; timeZone: string; source: 'WIALON'; generatedAt: string;
+  events: VehicleHistoryEvent[];
+}
 export interface AvailabilityMessageResponse {
   message: string;
   generatedAt: string;

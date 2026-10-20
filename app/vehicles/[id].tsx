@@ -10,14 +10,15 @@ import { api } from '@/lib/api';
 import { availability as availabilityText, availabilityLabels, bucharestDate, unspecified } from '@/lib/format';
 import { formatInternationalPhone } from '@/lib/phone';
 import { positionAgeMinutes, vehicleIssues, vehicleLocation } from '@/lib/vehicle';
-import { Availability, MapConfig, RoutingMode, Vehicle, VehicleRoute } from '@/types/vehicle';
+import { Availability, MapConfig, RoutingMode, Vehicle, VehicleHistory, VehicleHistoryEvent, VehicleRoute } from '@/types/vehicle';
 
-type Tab = 'overview' | 'trip' | 'map' | 'operations' | 'profile' | 'diagnostics';
+type Tab = 'overview' | 'trip' | 'map' | 'history' | 'operations' | 'profile' | 'diagnostics';
 type Editing = 'operations' | 'profile' | null;
 type Form = { tachograph: 'null' | 'true' | 'false'; vehicleModel: string; vehicleDetails: string; availability: Availability | 'null'; destination: string; routingMode: RoutingMode };
 
 const tabs: { key: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'overview', label: 'Rezumat', icon: 'apps-outline' }, { key: 'trip', label: 'Cursa curentă', icon: 'document-text-outline' }, { key: 'map', label: 'Hartă și traseu', icon: 'map-outline' },
+  { key: 'history', label: 'Istoric', icon: 'time-outline' },
   { key: 'operations', label: 'Operațiuni', icon: 'navigate-outline' }, { key: 'profile', label: 'Profil', icon: 'car-outline' },
   { key: 'diagnostics', label: 'Diagnostic', icon: 'pulse-outline' }
 ];
@@ -49,9 +50,14 @@ export default function VehicleScreen() {
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapRefreshing, setMapRefreshing] = useState(false);
   const [lastMapUpdatedAt, setLastMapUpdatedAt] = useState<string | null>(null);
+  const [historyDate, setHistoryDate] = useState(todayInBucharest());
+  const [history, setHistory] = useState<VehicleHistory | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const requestActive = useRef(false);
   const mapRequestActive = useRef(false);
   const editingRef = useRef<Editing>(null);
+  const historyRequest = useRef(0);
 
   useEffect(() => { const requested = validTab(params.section); if (requested) setTab(requested); }, [params.section]);
   const updateVehicle = useCallback((next: Vehicle) => { setVehicle(next); setForm((current) => editingRef.current ? current : fromVehicle(next)); }, []);
@@ -86,6 +92,22 @@ export default function VehicleScreen() {
       .catch((e: unknown) => { if (!disposed) setMapError(e instanceof Error ? e.message : 'Configurația hărții nu poate fi încărcată.'); });
     return () => { disposed = true; if (timer) clearInterval(timer); };
   }, [refreshMap, tab]));
+
+  const loadHistory = useCallback(async (date: string) => {
+    if (!id) return;
+    const requestId = ++historyRequest.current;
+    setHistoryLoading(true); setHistoryError(null);
+    try {
+      const result = await api.vehicleHistory(id, date);
+      if (requestId === historyRequest.current) setHistory(result);
+    } catch (e) {
+      if (requestId === historyRequest.current) { setHistory(null); setHistoryError(e instanceof Error ? e.message : 'Istoricul nu poate fi încărcat.'); }
+    } finally {
+      if (requestId === historyRequest.current) setHistoryLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => { if (tab === 'history') void loadHistory(historyDate); }, [historyDate, loadHistory, tab]);
 
   const startEditing = (section: Exclude<Editing, null>) => { if (!vehicle) return; setForm(fromVehicle(vehicle)); setConfirmTripRemoval(false); editingRef.current = section; setEditing(section); setMessage(null); setError(null); setTab(section); };
   const cancelEditing = () => { if (vehicle) setForm(fromVehicle(vehicle)); editingRef.current = null; setEditing(null); setConfirmTripRemoval(false); setError(null); };
@@ -133,6 +155,7 @@ export default function VehicleScreen() {
         {tab === 'overview' && <Overview vehicle={vehicle} issues={issues} wide={wide} onTab={setTab} onEdit={startEditing} onRefresh={() => void manualRefresh()} refreshing={refreshing} />}
         {tab === 'trip' && <TripTab vehicle={vehicle} onCreate={() => router.push('/trips/new')} />}
         {tab === 'map' && <MapTab vehicle={vehicle} config={mapConfig} fleet={fleet} route={route} error={mapError} refreshing={mapRefreshing} lastUpdatedAt={lastMapUpdatedAt} onRefresh={() => void refreshMap()} onOpenVehicle={(vehicleId) => router.push(`/vehicles/${vehicleId}`)} />}
+        {tab === 'history' && <HistoryTab history={history} date={historyDate} loading={historyLoading} error={historyError} onDate={setHistoryDate} onRetry={() => void loadHistory(historyDate)} />}
         {tab === 'operations' && <OperationsTab vehicle={vehicle} form={form} editing={editing === 'operations'} setForm={setForm} />}
         {tab === 'profile' && <DriverProfileTab vehicle={vehicle} form={form} editing={editing === 'profile'} setForm={setForm} />}
         {tab === 'diagnostics' && <DiagnosticsTab vehicle={vehicle} issues={issues} onRefresh={() => void manualRefresh()} refreshing={refreshing} />}
@@ -157,6 +180,51 @@ function Overview({ vehicle, issues, wide, onTab, onEdit, onRefresh, refreshing 
 
 function MapTab({ vehicle, config, fleet, route, error, refreshing, lastUpdatedAt, onRefresh, onOpenVehicle }: { vehicle: Vehicle; config: MapConfig | null; fleet: Vehicle[]; route: VehicleRoute | null; error: string | null; refreshing: boolean; lastUpdatedAt: string | null; onRefresh: () => void; onOpenVehicle: (id: string) => void }) {
   return <Section title="Hartă live și traseu"><View style={detail.mapMeta}><Text style={detail.muted}>Pozițiile se actualizează la {config?.refreshIntervalSeconds ?? 60} secunde.</Text><Text style={detail.muted}>Ultima sincronizare: {bucharestDate(lastUpdatedAt)}</Text></View>{error && <Message error>{error}</Message>}{route?.warning && <Message error>{route.warning}</Message>}{route?.status === 'ready' && <View style={detail.routeSummary}><Ionicons name="navigate" size={21} color="#93c5fd" /><View style={{ flex: 1 }}><Text style={detail.routeTitle}>{formatDistance(route.distanceMeters)} · {formatDuration(route.durationSeconds)}</Text><Text style={detail.muted}>Destinație identificată: {route.destination?.formattedAddress}</Text></View></View>}{config ? <VehicleMap config={config} vehicles={fleet.length ? fleet : [vehicle]} selectedVehicleId={vehicle.id} route={route} onVehiclePress={onOpenVehicle} height={460} /> : !error && <ActivityIndicator color={colors.accent} />}<View style={detail.quickActions}><Button secondary title={refreshing ? 'Se actualizează…' : 'Actualizează harta'} onPress={onRefresh} disabled={refreshing} /><Button secondary title="Deschide în Google Maps" disabled={vehicle.latitude === null || vehicle.longitude === null} onPress={() => void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${vehicle.latitude},${vehicle.longitude}`)} /></View><Text style={detail.attribution}>{config?.attribution ?? vehicle.attribution}</Text></Section>;
+}
+
+function HistoryTab({ history, date, loading, error, onDate, onRetry }: { history: VehicleHistory | null; date: string; loading: boolean; error: string | null; onDate: (date: string) => void; onRetry: () => void }) {
+  const today = todayInBucharest();
+  const offsets = date === today ? [-3, -2, -1, 0] : [-2, -1, 0, 1];
+  const days = offsets.map((offset) => addDateDays(date, offset));
+  return <Section title="Istoric activitate">
+    <View style={detail.historyHeader}>
+      <View><Text style={detail.historyTitle}>Deplasări și parcări</Text><Text style={detail.muted}>Date furnizate direct de Wialon.</Text></View>
+      {date !== today && <Button secondary title="Astăzi" onPress={() => onDate(today)} />}
+    </View>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={detail.dayPicker}>{days.map((day) => {
+      const selected = day === date; const future = day > today;
+      return <Pressable key={day} disabled={future} onPress={() => onDate(day)} style={[detail.day, selected && detail.daySelected, future && detail.dayDisabled]}>
+        <Text style={[detail.dayWeekday, selected && detail.dayTextSelected]}>{dateLabel(day, 'weekday')}</Text>
+        <Text style={[detail.dayNumber, selected && detail.dayTextSelected]}>{dateLabel(day, 'date')}</Text>
+      </Pressable>;
+    })}</ScrollView>
+    {loading && <View style={detail.historyState}><ActivityIndicator color={colors.accent} /><Text style={detail.muted}>Se încarcă istoricul…</Text></View>}
+    {!loading && error && <View style={detail.historyState}><Message error>{error}</Message><Button secondary title="Reîncearcă" onPress={onRetry} /></View>}
+    {!loading && !error && history?.events.length === 0 && <View style={detail.historyState}><Ionicons name="information-circle-outline" size={25} color={colors.muted} /><Text style={detail.okText}>Nu există deplasări sau parcări pentru ziua selectată.</Text></View>}
+    {!loading && !error && history && history.events.length > 0 && <View style={detail.timeline}>{history.events.map((event, index) => <HistoryEventRow key={`${event.type}-${event.startedAt}-${index}`} event={event} timeZone={history.timeZone} last={index === history.events.length - 1} />)}</View>}
+  </Section>;
+}
+
+function HistoryEventRow({ event, timeZone, last }: { event: VehicleHistoryEvent; timeZone: string; last: boolean }) {
+  const trip = event.type === 'TRIP';
+  return <View style={detail.historyEvent}>
+    <Text style={detail.eventTime}>{eventTime(event.startedAt, timeZone)}</Text>
+    <View style={detail.markerColumn}>
+      <View style={[detail.eventMarker, trip ? detail.tripMarker : detail.parkingMarker]}>{trip ? <Ionicons name="car" size={17} color="#86efac" /> : <Text style={detail.parkingLetter}>P</Text>}</View>
+      {!last && <View style={detail.timelineLine} />}
+    </View>
+    <View style={detail.eventBody}>
+      <View style={detail.eventMetrics}>
+        <HistoryMetric icon="time-outline" value={historyDuration(event.durationSeconds)} />
+        {trip ? <><HistoryMetric icon="analytics-outline" value={event.distanceKm === null ? '—' : `${event.distanceKm.toLocaleString('ro-RO', { maximumFractionDigits: 2 })} km`} /><HistoryMetric icon="speedometer-outline" value={event.maxSpeedKph === null ? '—' : `${event.maxSpeedKph.toLocaleString('ro-RO')} km/h`} /></> : event.engineOnSeconds > 0 ? <HistoryMetric icon="key-outline" value={historyEngineDuration(event.engineOnSeconds)} /> : null}
+      </View>
+      <Text style={detail.eventAddress}>{trip ? event.endAddress ?? event.startAddress ?? 'Adresă nespecificată' : event.address ?? 'Adresă nespecificată'}</Text>
+    </View>
+  </View>;
+}
+
+function HistoryMetric({ icon, value }: { icon: keyof typeof Ionicons.glyphMap; value: string }) {
+  return <View style={detail.historyMetric}><Ionicons name={icon} size={17} color="#60a5fa" /><Text style={detail.historyMetricText}>{value}</Text></View>;
 }
 
 function TripTab({ vehicle, onCreate }: { vehicle: Vehicle; onCreate: () => void }) {
@@ -207,6 +275,12 @@ function DiagnosticsTab({ vehicle, issues, onRefresh, refreshing }: { vehicle: V
 function SummaryRow({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }) { return <View style={detail.summaryRow}><View style={detail.summaryIcon}><Ionicons name={icon} size={18} color="#93c5fd" /></View><View style={{ flex: 1 }}><Text style={detail.summaryLabel}>{label}</Text><Text style={detail.summaryValue}>{value}</Text></View></View>; }
 function Choice({ label, value, options, onChange }: { label: string; value: string; options: string[][]; onChange: (value: string) => void }) { return <View style={{ gap: 7 }}><Text style={detail.choiceLabel}>{label}</Text><View style={detail.choices}>{options.map(([key, text]) => <Pressable key={key} onPress={() => onChange(key)} style={[detail.choice, value === key && detail.choiceActive]}><Text style={detail.choiceText}>{text}</Text></Pressable>)}</View></View>; }
 function validTab(value?: string): Tab | null { return tabs.some((item) => item.key === value) ? value as Tab : null; }
+function todayInBucharest() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
+function addDateDays(value: string, days: number) { const [year, month, day] = value.split('-').map(Number); return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10); }
+function dateLabel(value: string, part: 'weekday' | 'date') { const date = new Date(`${value}T12:00:00Z`); return part === 'weekday' ? new Intl.DateTimeFormat('ro-RO', { weekday: 'short', timeZone: 'UTC' }).format(date) : new Intl.DateTimeFormat('ro-RO', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(date); }
+function eventTime(value: string, timeZone: string) { return new Intl.DateTimeFormat('ro-RO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone }).format(new Date(value)); }
+function historyDuration(seconds: number) { const minutes = Math.max(seconds > 0 ? 1 : 0, Math.floor(seconds / 60)); return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`; }
+function historyEngineDuration(seconds: number) { return seconds < 60 ? `${seconds} s` : historyDuration(seconds); }
 function formatDistance(value: number | null | undefined) { return value === null || value === undefined ? 'Distanță nespecificată' : `${(value / 1000).toLocaleString('ro-RO', { maximumFractionDigits: 1 })} km`; }
 function formatDuration(value: number | null | undefined) { if (value === null || value === undefined) return 'Durată nespecificată'; const minutes = Math.max(1, Math.round(value / 60)); return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`; }
 
@@ -216,5 +290,8 @@ const detail = StyleSheet.create({
   overviewGrid: { gap: 14 }, overviewGridWide: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' }, overviewColumn: { flex: 1, minWidth: 280 }, summaryRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }, summaryIcon: { width: 34, height: 34, borderRadius: 9, backgroundColor: '#102f51', alignItems: 'center', justifyContent: 'center' }, summaryLabel: { color: colors.muted, fontSize: 10, fontWeight: '800', textTransform: 'uppercase' }, summaryValue: { color: colors.text, marginTop: 2, lineHeight: 19 }, inlineLink: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.panel2, borderRadius: 9, paddingHorizontal: 12 }, inlineLinkText: { color: '#93c5fd', fontWeight: '800', fontSize: 13 },
   issue: { minHeight: 54, flexDirection: 'row', alignItems: 'flex-start', gap: 9, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }, issueTitle: { color: colors.text, fontWeight: '800' }, issueText: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 2 }, ok: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 9 }, okText: { color: colors.text, fontWeight: '700' },
   mapMeta: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8 }, routeSummary: { backgroundColor: '#102f51', borderRadius: 10, padding: 12, flexDirection: 'row', gap: 10 }, routeTitle: { color: colors.text, fontWeight: '900', marginBottom: 3 }, attribution: { color: colors.muted, fontSize: 11 }, hint: { color: colors.muted, fontSize: 12, lineHeight: 18 }, stickyActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, padding: 13, borderRadius: 13, borderWidth: 1, borderColor: colors.border, backgroundColor: '#101722' },
+  historyHeader: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, historyTitle: { color: colors.text, fontSize: 16, fontWeight: '900' },
+  dayPicker: { gap: 9, paddingVertical: 4 }, day: { minWidth: 94, minHeight: 64, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9, borderWidth: 1, borderColor: colors.muted, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }, daySelected: { backgroundColor: '#1454a3', borderColor: colors.accent }, dayDisabled: { opacity: .35 }, dayWeekday: { color: colors.muted, fontSize: 12, fontWeight: '800', textTransform: 'capitalize' }, dayNumber: { color: colors.text, fontSize: 16, fontWeight: '900', marginTop: 2 }, dayTextSelected: { color: '#fff' },
+  historyState: { minHeight: 130, alignItems: 'center', justifyContent: 'center', gap: 12 }, timeline: { paddingTop: 4 }, historyEvent: { flexDirection: 'row', alignItems: 'stretch', minHeight: 86 }, eventTime: { width: 52, paddingTop: 8, color: colors.text, fontWeight: '900', fontSize: 15 }, markerColumn: { width: 38, alignItems: 'center' }, eventMarker: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, backgroundColor: colors.panel, alignItems: 'center', justifyContent: 'center', zIndex: 2 }, tripMarker: { borderColor: '#22c55e' }, parkingMarker: { borderColor: '#3b82f6' }, parkingLetter: { color: '#60a5fa', fontWeight: '900', fontSize: 17 }, timelineLine: { width: 2, flex: 1, backgroundColor: colors.border }, eventBody: { flex: 1, minWidth: 0, paddingTop: 6, paddingBottom: 18, paddingLeft: 8, borderBottomWidth: 1, borderBottomColor: colors.border }, eventMetrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 }, historyMetric: { flexDirection: 'row', alignItems: 'center', gap: 4 }, historyMetricText: { color: colors.text, fontSize: 14, fontWeight: '800' }, eventAddress: { color: colors.muted, marginTop: 7, lineHeight: 18 },
   choiceLabel: { color: colors.muted, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' }, choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, choice: { minHeight: 42, paddingHorizontal: 12, justifyContent: 'center', backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1, borderRadius: 9 }, choiceActive: { backgroundColor: colors.accent, borderColor: colors.accent }, choiceText: { color: colors.text, fontWeight: '700' }, subheading: { color: colors.text, fontWeight: '900', fontSize: 16, marginTop: 8 }
 });
