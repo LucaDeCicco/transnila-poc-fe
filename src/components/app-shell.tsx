@@ -7,13 +7,12 @@ import { api } from '@/lib/api';
 import { TripSearchResult } from '@/types/vehicle';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
-export type AppSection = 'operations' | 'map' | 'vehicles' | 'availability' | 'hours' | 'drivers' | 'attention';
+export type AppSection = 'operations' | 'map' | 'vehicles' | 'availability' | 'drivers' | 'attention';
 
 const navigation: { key: AppSection; label: string; compactLabel?: string; icon: IconName; route: Href; mobile?: boolean }[] = [
   { key: 'operations', label: 'Operațiuni', icon: 'grid-outline', route: '/' },
   { key: 'map', label: 'Hartă', icon: 'map-outline', route: '/map' },
   { key: 'vehicles', label: 'Vehicule', icon: 'car-outline', route: '/vehicles' },
-  { key: 'hours', label: 'Program șoferi', compactLabel: 'Program', icon: 'time-outline', route: '/driver-hours' },
   { key: 'drivers', label: 'Șoferi', icon: 'people-outline', route: '/drivers', mobile: false },
   { key: 'availability', label: 'Mesaj', icon: 'chatbubble-ellipses-outline', route: '/availability', mobile: false },
   { key: 'attention', label: 'Necesită atenție', compactLabel: 'Mai mult', icon: 'ellipsis-horizontal-circle-outline', route: '/attention' }

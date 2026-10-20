@@ -16,7 +16,6 @@ type StatusFilter = 'ALL' | Availability | 'UNSPECIFIED' | 'ATTENTION';
 export default function OperationsScreen() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [messageSummary, setMessageSummary] = useState<AvailabilityMessageResponse | null>(null);
-  const [driverQuestionCount, setDriverQuestionCount] = useState(0);
   const [mapConfig, setMapConfig] = useState<MapConfig | null>(null);
   const [lastSuccessAt, setLastSuccessAt] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -44,7 +43,6 @@ export default function OperationsScreen() {
       const [saved, status, config] = await Promise.all([api.list(), api.fleetRefreshStatus(), api.mapConfig()]);
       setVehicles(saved); setLastSuccessAt(status.lastSuccessAt); setMapConfig(config); setLoading(false);
       api.availabilityMessage().then(setMessageSummary).catch(() => undefined);
-      api.driverHours(true).then((value) => setDriverQuestionCount(value.questions.length)).catch(() => undefined);
       const refreshed = await api.autoFleet();
       if (refreshed.performed && refreshed.success === false) setError(refreshed.error ?? 'Sincronizarea flotei a eșuat.');
       if (refreshed.performed) {
@@ -113,12 +111,6 @@ export default function OperationsScreen() {
       <View style={{ flex: 1, minWidth: 0 }}><Text style={screen.messageTitle}>Mesaj disponibilitate</Text><Text style={screen.messageText}>{messageSummary ? `${messageSummary.includedVehicles} vehicule incluse · generat ${bucharestDate(messageSummary.generatedAt)}` : 'Deschide mesajul pregătit pentru WhatsApp'}</Text></View>
       <Ionicons name="chevron-forward" size={22} color={colors.muted} />
     </Pressable>
-    <Pressable onPress={() => router.push('/driver-hours')} style={({ pressed }) => [screen.hoursSummary, driverQuestionCount > 0 && screen.hoursAttention, pressed && { opacity: .75 }]}>
-      <View style={[screen.messageIcon, { backgroundColor: driverQuestionCount > 0 ? '#6b4f10' : '#1d416f' }]}><Ionicons name="time-outline" size={23} color={driverQuestionCount > 0 ? colors.yellow : '#bfdbfe'} /></View>
-      <View style={{ flex: 1, minWidth: 0 }}><Text style={screen.messageTitle}>Program șoferi</Text><Text style={screen.messageText}>{driverQuestionCount > 0 ? `${driverQuestionCount} confirmări curente necesare` : 'Vezi timpul disponibil și estimările din GPS'}</Text></View>
-      {driverQuestionCount > 0 && <View style={screen.questionCount}><Text style={screen.questionCountText}>{driverQuestionCount}</Text></View>}
-      <Ionicons name="chevron-forward" size={22} color={colors.muted} />
-    </Pressable>
     <View style={screen.tools}><SearchField value={search} onChange={setSearch} /><Pressable onPress={() => setShowFilters((value) => !value)} style={[screen.filterButton, (showFilters || hasAdvancedFilters) && screen.filterButtonActive]}><Ionicons name="options-outline" size={20} color={colors.text} /><Text style={screen.filterButtonText}>Filtre{hasAdvancedFilters ? ' active' : ''}</Text></Pressable></View>
     <View style={screen.chips}>
       <FilterChip label="Toate" active={statusFilter === 'ALL'} count={metrics.all} onPress={() => setStatusFilter('ALL')} />
@@ -184,7 +176,6 @@ const screen = StyleSheet.create({
   syncLine: { minHeight: 54, backgroundColor: colors.panel, borderColor: colors.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, syncLabel: { color: colors.muted, fontSize: 10, fontWeight: '800', textTransform: 'uppercase' }, syncValue: { color: colors.text, fontWeight: '800', marginTop: 2 }, liveDot: { width: 10, height: 10, borderRadius: 5 },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   messageSummary: { minHeight: 72, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#264d80', backgroundColor: '#10233d', flexDirection: 'row', alignItems: 'center', gap: 12 }, messageIcon: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#1d416f', alignItems: 'center', justifyContent: 'center' }, messageTitle: { color: colors.text, fontWeight: '900' }, messageText: { color: colors.muted, fontSize: 12, marginTop: 3 },
-  hoursSummary: { minHeight: 72, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#264d80', backgroundColor: '#10233d', flexDirection: 'row', alignItems: 'center', gap: 12 }, hoursAttention: { borderColor: '#806216', backgroundColor: '#2a2412' }, questionCount: { minWidth: 28, height: 28, paddingHorizontal: 7, borderRadius: 14, backgroundColor: colors.orange, alignItems: 'center', justifyContent: 'center' }, questionCountText: { color: '#111827', fontWeight: '900' },
   tools: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, filterButton: { minHeight: 48, borderRadius: 11, borderColor: colors.border, borderWidth: 1, backgroundColor: colors.panel, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 14 }, filterButtonActive: { borderColor: colors.accent, backgroundColor: '#16345b' }, filterButtonText: { color: colors.text, fontWeight: '800', fontSize: 13 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, advancedFilters: { padding: 14, backgroundColor: colors.panel, borderColor: colors.border, borderWidth: 1, borderRadius: 14, gap: 15 }, filterGroup: { gap: 7 }, filterLabel: { color: colors.muted, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' }, reset: { color: '#93c5fd', fontWeight: '800', fontSize: 13 },
   listHeading: { marginTop: 4, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }, sectionTitle: { color: colors.text, fontSize: 19, fontWeight: '900' }, sectionSubtitle: { color: colors.muted, fontSize: 12, marginTop: 2 },
