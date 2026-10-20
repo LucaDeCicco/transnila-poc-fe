@@ -27,7 +27,7 @@ export function QuickEditVehicle({ vehicle, visible, onClose, onSave }: {
   const save = async () => {
     if (!vehicle || saving) return;
     if (vehicle.currentTrip && status === 'AVAILABLE' && !confirmRemoval) {
-      setConfirmRemoval(true); setError('Statusul Disponibil șterge definitiv cursa curentă și PDF-ul. Apasă din nou „Confirmă și salvează”.'); return;
+      setConfirmRemoval(true); setError('Statusul Disponibil șterge definitiv cursa curentă și documentul original. Apasă din nou „Confirmă și salvează”.'); return;
     }
     setSaving(true); setError(null);
     try {

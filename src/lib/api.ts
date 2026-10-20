@@ -36,7 +36,7 @@ export const api = {
   cancelTripUpload: (blobUrl: string) => request<{ deleted: boolean }>('/trips/cancel-upload', { method: 'POST', body: JSON.stringify({ blobUrl }) }),
   assignTrip: (vehicleId: string, data: object) => request<Vehicle>(`/trips/vehicles/${encodeURIComponent(vehicleId)}`, { method: 'PUT', body: JSON.stringify(data) }),
   search: (query: string) => request<TripSearchResult[]>(`/search?q=${encodeURIComponent(query)}`),
-  tripPdfUrl: (vehicleId: string) => `${API_BASE}/trips/vehicles/${encodeURIComponent(vehicleId)}/pdf`
+  tripDocumentUrl: (vehicleId: string) => `${API_BASE}/trips/vehicles/${encodeURIComponent(vehicleId)}/document`
   ,drivers: (activeOnly = true) => request<Driver[]>(`/drivers?activeOnly=${activeOnly}`),
   createDriver: (data: object) => request<Driver>('/drivers', { method: 'POST', body: JSON.stringify(data) }),
   updateDriver: (id: string, data: object) => request<Driver>(`/drivers/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),

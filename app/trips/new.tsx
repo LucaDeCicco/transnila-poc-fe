@@ -2,11 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { upload } from '@vercel/blob/client';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { AppShell } from '@/components/app-shell';
 import { Button, colors, Field, Message, Section, styles as ui } from '@/components/ui';
 import { API_BASE, ApiError, api } from '@/lib/api';
-import { pickPdf } from '@/lib/pdf-picker';
+import { pickOrderDocument } from '@/lib/order-document-picker';
 import { BlobReference, ExtractionResult, Vehicle } from '@/types/vehicle';
 
 type Form = Record<string, string>;
@@ -48,18 +48,31 @@ export default function NewTripScreen() {
   const selected = vehicles.find((vehicle) => vehicle.id === vehicleId);
   const set = (key: string, value: string) => { setForm((current) => ({ ...current, [key]: value })); setRed((current) => { const next = new Set(current); if (value.trim()) next.delete(key); return next; }); };
 
-  const choosePdf = async () => {
+  const chooseDocument = async (source: 'files' | 'camera' = 'files') => {
     setError(null);
-    const asset = await pickPdf();
-    if (!asset) return;
-    if (asset.size > 10 * 1024 * 1024) return setError('PDF-ul poate avea maximum 10 MB.');
-    if (!API_BASE) return setError('Adresa backendului nu este configurată.');
-    setLoading(true);
     try {
-      if (blob) await api.cancelTripUpload(blob.blobUrl).catch(() => undefined);
+      const asset = await pickOrderDocument(source);
+      if (!asset) return;
+      if (asset.size > 10 * 1024 * 1024) {
+        return setError(`${asset.kind === 'IMAGE' ? 'Imaginea' : 'PDF-ul'} poate avea maximum 10 MB.`);
+      }
+      if (!API_BASE) return setError('Adresa backendului nu este configurată.');
+      setLoading(true);
+      if (blob) {
+        await api.cancelTripUpload(blob.blobUrl).catch(() => undefined);
+        setBlob(null);
+        setExtraction(null);
+      }
       const body = asset.file ?? await (await fetch(asset.uri)).blob();
+      if (body.size > 10 * 1024 * 1024) {
+        return setError(`${asset.kind === 'IMAGE' ? 'Imaginea' : 'PDF-ul'} poate avea maximum 10 MB.`);
+      }
       const safeName = asset.name.replace(/[^a-zA-Z0-9._-]+/g, '-');
-      const uploaded = await upload(`orders/${safeName.toLowerCase().endsWith('.pdf') ? safeName : `${safeName}.pdf`}`, body, { access: 'private', handleUploadUrl: `${API_BASE}/trips/upload`, contentType: 'application/pdf' });
+      const fallbackExtension = asset.type === 'application/pdf' ? 'pdf'
+        : asset.type === 'image/jpeg' ? 'jpg'
+          : asset.type.split('/')[1];
+      const uploadName = safeName.includes('.') ? safeName : `${safeName}.${fallbackExtension}`;
+      const uploaded = await upload(`orders/${uploadName}`, body, { access: 'private', handleUploadUrl: `${API_BASE}/trips/upload`, contentType: asset.type });
       const reference = { blobUrl: uploaded.url, pathname: uploaded.pathname, originalName: asset.name, contentType: uploaded.contentType, size: asset.size || body.size };
       setBlob(reference);
       const parsed = await api.extractTrip(reference); setExtraction(parsed);
@@ -69,7 +82,7 @@ export default function NewTripScreen() {
         if (field.value === null || field.confidence < .75) uncertain.add(key);
       });
       setForm(next); setYellow(uncertain); setRed(new Set());
-    } catch (e) { setError(e instanceof Error ? e.message : 'PDF-ul nu a putut fi procesat.'); }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Documentul nu a putut fi procesat.'); }
     finally { setLoading(false); }
   };
 
@@ -94,13 +107,13 @@ export default function NewTripScreen() {
   };
   const cancel = async () => { if (blob) await api.cancelTripUpload(blob.blobUrl).catch(() => undefined); router.back(); };
 
-  return <AppShell active="operations" title="Cursă nouă" subtitle="Completează manual sau importă datele dintr-un PDF" back>
+  return <AppShell active="operations" title="Cursă nouă" subtitle="Completează manual sau importă datele dintr-un PDF ori dintr-o imagine" back>
     <ScrollView contentContainerStyle={[ui.content, page.content]} keyboardShouldPersistTaps="handled">
       {error && <Message error>{error}</Message>}
       <Section title="Documentul original">
-        <Text style={page.help}>Poți salva cursa fără PDF sau poți încărca un PDF de maximum 10 MB. Datele detectate sunt doar o propunere și rămân editabile.</Text>
-        <View style={page.actions}><Button title={blob ? 'Înlocuiește PDF-ul' : 'Încarcă și citește PDF'} onPress={() => void choosePdf()} disabled={loading || saving} />{loading && <View style={page.progress}><ActivityIndicator color={colors.accent} /><Text style={page.help}>Încărcare și analiză OpenAI…</Text></View>}</View>
-        {blob && <View style={page.file}><Ionicons name="document-text-outline" color={colors.text} size={22} /><View style={{ flex: 1 }}><Text style={page.fileName}>{blob.originalName}</Text><Text style={page.help}>{(blob.size / 1024 / 1024).toFixed(2)} MB · păstrat privat</Text></View></View>}
+        <Text style={page.help}>Poți salva cursa fără document sau poți încărca un singur PDF ori o imagine de maximum 10 MB. Pe telefon poți alege și camera. Datele detectate sunt doar o propunere și rămân editabile.</Text>
+        <View style={page.actions}><Button title={blob ? 'Înlocuiește documentul' : 'Încarcă PDF sau imagine'} onPress={() => void chooseDocument()} disabled={loading || saving} />{Platform.OS === 'web' && <Button secondary title="Fotografiază documentul" onPress={() => void chooseDocument('camera')} disabled={loading || saving} />}{loading && <View style={page.progress}><ActivityIndicator color={colors.accent} /><Text style={page.help}>Încărcare și analiză OpenAI…</Text></View>}</View>
+        {blob && <View style={page.file}><Ionicons name={blob.contentType === 'application/pdf' ? 'document-text-outline' : 'image-outline'} color={colors.text} size={22} /><View style={{ flex: 1 }}><Text style={page.fileName}>{blob.originalName}</Text><Text style={page.help}>{(blob.size / 1024 / 1024).toFixed(2)} MB · păstrat privat</Text></View></View>}
         {extraction?.documentWarnings.map((warning) => <Message key={warning}>{warning}</Message>)}
       </Section>
       <Section title="Vehicul și status inițial">
@@ -109,7 +122,7 @@ export default function NewTripScreen() {
       </Section>
       {groups.map((group) => <Section key={group.title} title={group.title}><View style={[page.fields, twoColumns && page.fieldsWide]}>{group.fields.map(([key, label]) => <MarkedField key={key} fieldKey={key} label={label} value={form[key]} required={required.includes(key)} yellow={yellow.has(key)} red={red.has(key)} wide={twoColumns} onChange={(value) => set(key, value)} />)}</View></Section>)}
       {extraction?.additionalData?.length ? <Section title="Alte informații din document">{extraction.additionalData.map((item, index) => <View key={`${item.label}-${index}`} style={page.extra}><Text style={page.extraLabel}>{item.label}</Text><Text style={page.extraValue}>{item.value}</Text></View>)}</Section> : null}
-      {conflict && <View style={page.conflict}><Text style={page.conflictTitle}>Vehiculul {selected?.registrationNumber} are deja o cursă.</Text><Text style={page.help}>Dacă suprascrii, cursa curentă și PDF-ul ei sunt șterse definitiv.</Text><View style={page.actions}><Button title="Suprascrie cursa" onPress={() => void save(true)} disabled={saving} /><Button secondary title="Alege alt vehicul" onPress={() => setConflict(false)} /></View></View>}
+      {conflict && <View style={page.conflict}><Text style={page.conflictTitle}>Vehiculul {selected?.registrationNumber} are deja o cursă.</Text><Text style={page.help}>Dacă suprascrii, cursa curentă și documentul ei original sunt șterse definitiv.</Text><View style={page.actions}><Button title="Suprascrie cursa" onPress={() => void save(true)} disabled={saving} /><Button secondary title="Alege alt vehicul" onPress={() => setConflict(false)} /></View></View>}
       <View style={page.footer}><Button title="Salvează și asignează" onPress={() => void save()} disabled={saving || loading} /><Button secondary title="Anulează" onPress={() => void cancel()} disabled={saving} /></View>
     </ScrollView>
   </AppShell>;

@@ -42,7 +42,8 @@ export interface Trip {
   cargoDescription: string | null; cargoQuantity: number | null; cargoPackageType: string | null; cargoDimensions: string | null; cargoWeightKg: number | null; cargoVolumeM3: number | null; cargoLoadingMeters: number | null; cargoPallets: number | null; cargoParcels: number | null; cargoDangerous: boolean | null; cargoStackable: boolean | null; cargoTemperatureC: number | null;
   priceAmount: number; currency: string; vatRate: number | null; vatAmount: number | null; totalAmount: number | null; paymentTerms: string | null; invoicingInstructions: string | null; operationalInstructions: string | null; contractualNotes: string | null;
   assignedDriverName: string | null; assignedDriverPhone: string | null; assignedRegistrationNumber: string;
-  pdfUrl: string | null; pdfPathname: string | null; pdfOriginalName: string | null; pdfContentType: string | null; pdfSize: number | null;
+  sourceDocumentType: 'PDF' | 'IMAGE' | null; sourceDocumentUrl: string | null; sourceDocumentPathname: string | null;
+  sourceDocumentOriginalName: string | null; sourceDocumentContentType: string | null; sourceDocumentSize: number | null;
   extraction: Record<string, unknown> | null; additionalData: unknown; createdAt: string; updatedAt: string;
 }
 export interface TripSearchResult { vehicleId: string; registrationNumber: string; driverName: string | null; orderNumber: string | null; externalReference: string | null; clientName: string | null; status: Availability | null }
