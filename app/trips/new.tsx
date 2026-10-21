@@ -17,7 +17,7 @@ const empty: Form = {
   cargoDescription: '', cargoQuantity: '', cargoPackageType: '', cargoDimensions: '', cargoWeightKg: '', cargoVolumeM3: '', cargoLoadingMeters: '', cargoPallets: '', cargoParcels: '', cargoDangerous: '', cargoStackable: '', cargoTemperatureC: '',
   priceAmount: '', currency: '', vatRate: '', vatAmount: '', totalAmount: '', paymentTerms: '', invoicingInstructions: '', operationalInstructions: '', contractualNotes: ''
 };
-const required = ['orderNumber', 'clientName', 'pickupAddress', 'pickupLocalDate', 'pickupLocalTime', 'deliveryAddress', 'deliveryLocalDate', 'deliveryLocalTime', 'priceAmount', 'currency'];
+const required = ['orderNumber', 'clientName', 'pickupAddress', 'pickupLocalDate', 'pickupLocalTime', 'deliveryLocalDate', 'deliveryLocalTime', 'priceAmount', 'currency'];
 const numeric = new Set(['cargoQuantity', 'cargoWeightKg', 'cargoVolumeM3', 'cargoLoadingMeters', 'cargoPallets', 'cargoParcels', 'cargoTemperatureC', 'priceAmount', 'vatRate', 'vatAmount', 'totalAmount']);
 const booleans = new Set(['cargoDangerous', 'cargoStackable']);
 const groups = [
@@ -117,7 +117,7 @@ export default function NewTripScreen() {
         {extraction?.documentWarnings.map((warning) => <Message key={warning}>{warning}</Message>)}
       </Section>
       <Section title="Vehicul și status inițial">
-        <Text style={page.help}>Cursa se salvează direct cu statusul „Către preluare cursă”.</Text>
+        <Text style={page.help}>Cursa se salvează direct cu statusul „Către preluare cursă”. Adresa de livrare poate fi completată ulterior.</Text>
         <View style={page.vehicleGrid}>{vehicles.map((vehicle) => <Pressable key={vehicle.id} onPress={() => setVehicleId(vehicle.id)} style={[page.vehicle, vehicleId === vehicle.id && page.vehicleActive]}><Text style={page.vehiclePlate}>{vehicle.registrationNumber}</Text><Text style={page.help}>{vehicle.driverName ?? 'Șofer nespecificat'}{vehicle.currentTrip ? ' · are cursă' : ''}</Text></Pressable>)}</View>
       </Section>
       {groups.map((group) => <Section key={group.title} title={group.title}><View style={[page.fields, twoColumns && page.fieldsWide]}>{group.fields.map(([key, label]) => <MarkedField key={key} fieldKey={key} label={label} value={form[key]} required={required.includes(key)} yellow={yellow.has(key)} red={red.has(key)} wide={twoColumns} onChange={(value) => set(key, value)} />)}</View></Section>)}

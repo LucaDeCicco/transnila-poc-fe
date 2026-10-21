@@ -29,7 +29,7 @@ Aplicația este împărțită în Operațiuni, Hartă, Vehicule, Mesaj și Neces
 
 Ecranul Mesaj pregătește textul pentru WhatsApp. Vehiculele active marcate `AVAILABLE` sunt grupate după model, fără diferență între litere mari și mici. Butonul dedicat actualizează flota fără cooldown, regenerează mesajul și păstrează duplicatele de locație; butonul de copiere păstrează marcajele `*` folosite de WhatsApp pentru bold. Interfața arată vehiculele incluse, cele excluse și motivul excluderii.
 
-Editarea păstrează local valorile nesalvate când se schimbă datele GPS. Șirurile golite sunt trimise backendului și normalizate la `null`. Tahograful are trei stări distincte. Toate momentele sunt afișate explicit în `Europe/Bucharest`.
+Editarea păstrează local valorile nesalvate când se schimbă datele GPS. Șirurile golite sunt trimise backendului și normalizate la `null`. Destinația din Operațiuni sincronizează adresa etapei active din cursă, iar adresele cursei pot fi corectate separat; adresa de livrare poate fi completată ulterior. Tahograful are trei stări distincte. Toate momentele sunt afișate explicit în `Europe/Bucharest`.
 
 Profilul mașinii permite selectarea țării și introducerea telefonului șoferului. Numărul este validat internațional, apare în registru și în detalii și oferă acțiuni directe pentru apel și WhatsApp. Numărul nu este inclus în mesajul public de disponibilitate.
 

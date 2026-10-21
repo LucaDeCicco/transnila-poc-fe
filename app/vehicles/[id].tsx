@@ -153,7 +153,7 @@ export default function VehicleScreen() {
       <ScrollView style={detail.scroll} contentContainerStyle={[ui.content, detail.content]} keyboardShouldPersistTaps="handled">
         {error && <Message error>{error}</Message>}{message && <Message>{message}</Message>}
         {tab === 'overview' && <Overview vehicle={vehicle} issues={issues} wide={wide} onTab={setTab} onEdit={startEditing} onRefresh={() => void manualRefresh()} refreshing={refreshing} />}
-        {tab === 'trip' && <TripTab vehicle={vehicle} onCreate={() => router.push('/trips/new')} />}
+        {tab === 'trip' && <TripTab vehicle={vehicle} onCreate={() => router.push('/trips/new')} onSaved={updateVehicle} />}
         {tab === 'map' && <MapTab vehicle={vehicle} config={mapConfig} fleet={fleet} route={route} error={mapError} refreshing={mapRefreshing} lastUpdatedAt={lastMapUpdatedAt} onRefresh={() => void refreshMap()} onOpenVehicle={(vehicleId) => router.push(`/vehicles/${vehicleId}`)} />}
         {tab === 'history' && <HistoryTab history={history} date={historyDate} loading={historyLoading} error={historyError} onDate={setHistoryDate} onRetry={() => void loadHistory(historyDate)} />}
         {tab === 'operations' && <OperationsTab vehicle={vehicle} form={form} editing={editing === 'operations'} setForm={setForm} />}
@@ -227,13 +227,43 @@ function HistoryMetric({ icon, value }: { icon: keyof typeof Ionicons.glyphMap; 
   return <View style={detail.historyMetric}><Ionicons name={icon} size={17} color="#60a5fa" /><Text style={detail.historyMetricText}>{value}</Text></View>;
 }
 
-function TripTab({ vehicle, onCreate }: { vehicle: Vehicle; onCreate: () => void }) {
+function TripTab({ vehicle, onCreate, onSaved }: { vehicle: Vehicle; onCreate: () => void; onSaved: (vehicle: Vehicle) => void }) {
   const trip = vehicle.currentTrip;
+  const [editingAddresses, setEditingAddresses] = useState(false);
+  const [pickupAddress, setPickupAddress] = useState(trip?.pickupAddress ?? '');
+  const [deliveryAddress, setDeliveryAddress] = useState(trip?.deliveryAddress ?? '');
+  const [savingAddresses, setSavingAddresses] = useState(false);
+  const [addressMessage, setAddressMessage] = useState<string | null>(null);
+  const [addressError, setAddressError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPickupAddress(trip?.pickupAddress ?? '');
+    setDeliveryAddress(trip?.deliveryAddress ?? '');
+    setEditingAddresses(false);
+    setAddressMessage(null);
+    setAddressError(null);
+  }, [trip?.id, trip?.pickupAddress, trip?.deliveryAddress]);
+
+  const saveAddresses = async () => {
+    if (!trip || savingAddresses) return;
+    if (!pickupAddress.trim()) return setAddressError('Adresa de ridicare este obligatorie.');
+    setSavingAddresses(true); setAddressError(null); setAddressMessage(null);
+    try {
+      const updated = await api.updateTripAddresses(vehicle.id, {
+        pickupAddress: pickupAddress.trim(), deliveryAddress: deliveryAddress.trim() || null
+      });
+      onSaved(updated); setEditingAddresses(false); setAddressMessage('Adresele cursei au fost salvate.');
+    } catch (e) { setAddressError(e instanceof Error ? e.message : 'Adresele cursei nu au putut fi salvate.'); }
+    finally { setSavingAddresses(false); }
+  };
+
   if (!trip) return <Section title="Cursa curentă"><View style={detail.ok}><Ionicons name="information-circle-outline" size={22} color={colors.muted} /><Text style={detail.okText}>Vehiculul nu are o cursă structurată asignată.</Text></View><View style={detail.quickActions}><Button title="Adaugă o cursă" onPress={onCreate} /></View></Section>;
   return <>
-    <Section title={`Comanda ${trip.orderNumber}`}><Row label="Referință externă" value={unspecified(trip.externalReference)} /><Row label="Data comenzii" value={unspecified(trip.orderDate)} /><Row label="Client" value={trip.clientName} /><Row label="Cod fiscal / TVA" value={unspecified(trip.clientVat)} /><Row label="Adresă client" value={unspecified(trip.clientAddress)} /><Row label="Contact client" value={[trip.clientContactName, trip.clientContactPhone, trip.clientContactEmail].filter(Boolean).join(' · ') || 'Nespecificat'} /></Section>
+    <Section title={`Comanda ${trip.orderNumber}`}><Row label="Referință externă" value={unspecified(trip.externalReference)} /><Row label="Data comenzii" value={unspecified(trip.orderDate)} /><Row label="Client" value={trip.clientName} /><Row label="Cod fiscal / TVA" value={unspecified(trip.clientVat)} /><Row label="Adresă client" value={unspecified(trip.clientAddress)} /><Row label="Contact client" value={[trip.clientContactName, trip.clientContactPhone, trip.clientContactEmail].filter(Boolean).join(' · ') || 'Nespecificat'} /><View style={detail.quickActions}><Button secondary title={editingAddresses ? 'Închide editarea adreselor' : 'Editează adresele'} onPress={() => { setEditingAddresses(!editingAddresses); setAddressError(null); setAddressMessage(null); }} /></View></Section>
+    {editingAddresses && <Section title="Adresele cursei"><Field label="Adresă ridicare" value={pickupAddress} onChangeText={setPickupAddress} maxLength={1000} placeholder="Adresa de ridicare este obligatorie" /><Field label="Adresă livrare (opțională)" value={deliveryAddress} onChangeText={setDeliveryAddress} maxLength={1000} placeholder="Poate fi completată ulterior" /><Text style={detail.hint}>Dacă modifici adresa etapei active, destinația operațională și traseul vehiculului se actualizează automat.</Text>{addressError && <Message error>{addressError}</Message>}<View style={detail.quickActions}><Button title="Salvează adresele" onPress={() => void saveAddresses()} disabled={savingAddresses} /><Button secondary title="Anulează" onPress={() => { setPickupAddress(trip.pickupAddress); setDeliveryAddress(trip.deliveryAddress ?? ''); setEditingAddresses(false); setAddressError(null); }} /></View></Section>}
+    {!editingAddresses && addressMessage && <Message>{addressMessage}</Message>}
     <View style={[detail.overviewGrid, detail.overviewGridWide]}><View style={detail.overviewColumn}><Section title="Ridicare"><Row label="Companie" value={unspecified(trip.pickupCompany)} /><Row label="Adresă" value={trip.pickupAddress} /><Row label="Data și ora locală" value={`${trip.pickupLocalDate} · ${trip.pickupLocalTime}${trip.pickupTimeZone ? ` · ${trip.pickupTimeZone}` : ''}`} /><Row label="Contact" value={[trip.pickupContactName, trip.pickupContactPhone].filter(Boolean).join(' · ') || 'Nespecificat'} /><Row label="Referință" value={unspecified(trip.pickupReference)} /><Row label="Instrucțiuni" value={unspecified(trip.pickupInstructions)} /></Section></View>
-      <View style={detail.overviewColumn}><Section title="Livrare"><Row label="Companie" value={unspecified(trip.deliveryCompany)} /><Row label="Adresă" value={trip.deliveryAddress} /><Row label="Data și ora locală" value={`${trip.deliveryLocalDate} · ${trip.deliveryLocalTime}${trip.deliveryTimeZone ? ` · ${trip.deliveryTimeZone}` : ''}`} /><Row label="Contact" value={[trip.deliveryContactName, trip.deliveryContactPhone].filter(Boolean).join(' · ') || 'Nespecificat'} /><Row label="Referință" value={unspecified(trip.deliveryReference)} /><Row label="Instrucțiuni" value={unspecified(trip.deliveryInstructions)} /></Section></View></View>
+      <View style={detail.overviewColumn}><Section title="Livrare"><Row label="Companie" value={unspecified(trip.deliveryCompany)} /><Row label="Adresă" value={unspecified(trip.deliveryAddress)} />{!trip.deliveryAddress && <Message>Destinația de livrare nu a fost încă stabilită.</Message>}<Row label="Data și ora locală" value={`${trip.deliveryLocalDate} · ${trip.deliveryLocalTime}${trip.deliveryTimeZone ? ` · ${trip.deliveryTimeZone}` : ''}`} /><Row label="Contact" value={[trip.deliveryContactName, trip.deliveryContactPhone].filter(Boolean).join(' · ') || 'Nespecificat'} /><Row label="Referință" value={unspecified(trip.deliveryReference)} /><Row label="Instrucțiuni" value={unspecified(trip.deliveryInstructions)} /></Section></View></View>
     <Section title="Marfă"><Row label="Descriere" value={unspecified(trip.cargoDescription)} /><Row label="Cantitate / ambalaj" value={[trip.cargoQuantity, trip.cargoPackageType].filter((v) => v !== null).join(' · ') || 'Nespecificat'} /><Row label="Dimensiuni" value={unspecified(trip.cargoDimensions)} /><Row label="Greutate" value={trip.cargoWeightKg === null ? 'Nespecificat' : `${trip.cargoWeightKg} kg`} /><Row label="Volum / metri liniari" value={[trip.cargoVolumeM3 === null ? null : `${trip.cargoVolumeM3} m³`, trip.cargoLoadingMeters === null ? null : `${trip.cargoLoadingMeters} m`].filter(Boolean).join(' · ') || 'Nespecificat'} /><Row label="Paleți / colete" value={[trip.cargoPallets === null ? null : `${trip.cargoPallets} paleți`, trip.cargoParcels === null ? null : `${trip.cargoParcels} colete`].filter(Boolean).join(' · ') || 'Nespecificat'} /><Row label="ADR" value={trip.cargoDangerous === null ? 'Nespecificat' : trip.cargoDangerous ? 'Da' : 'Nu'} /><Row label="Stivuibil" value={trip.cargoStackable === null ? 'Nespecificat' : trip.cargoStackable ? 'Da' : 'Nu'} /></Section>
     <Section title="Tarif și condiții"><Row label="Preț" value={`${trip.priceAmount.toLocaleString('ro-RO')} ${trip.currency}`} /><Row label="TVA" value={trip.vatRate === null ? 'Nespecificat' : `${trip.vatRate}%`} /><Row label="Total" value={trip.totalAmount === null ? 'Nespecificat' : `${trip.totalAmount.toLocaleString('ro-RO')} ${trip.currency}`} /><Row label="Plată" value={unspecified(trip.paymentTerms)} /><Row label="Facturare" value={unspecified(trip.invoicingInstructions)} /><Row label="Instrucțiuni operaționale" value={unspecified(trip.operationalInstructions)} /><Row label="Note contractuale" value={unspecified(trip.contractualNotes)} /></Section>
     <Section title="Asignare și document"><Row label="Vehicul la asignare" value={trip.assignedRegistrationNumber} /><Row label="Șofer la asignare" value={unspecified(trip.assignedDriverName)} /><Row label="Telefon la asignare" value={unspecified(trip.assignedDriverPhone)} /><Row label="Document original" value={trip.sourceDocumentOriginalName ?? 'Nu a fost atașat'} />{trip.sourceDocumentUrl && <View style={detail.quickActions}><Button title="Vezi documentul original" onPress={() => void Linking.openURL(api.tripDocumentUrl(vehicle.id))} /></View>}</Section>
@@ -241,7 +271,18 @@ function TripTab({ vehicle, onCreate }: { vehicle: Vehicle; onCreate: () => void
 }
 
 function OperationsTab({ vehicle, form, editing, setForm }: { vehicle: Vehicle; form: Form; editing: boolean; setForm: (form: Form) => void }) {
-  return <Section title="Disponibilitate și destinație">{editing ? <><Choice label="Disponibilitate" value={form.availability} options={[['null', 'Nespecificat'], ...Object.entries(availabilityLabels)]} onChange={(availability) => setForm({ ...form, availability: availability as Form['availability'] })} /><Field label="Destinație" value={form.destination} onChangeText={(destination) => setForm({ ...form, destination })} maxLength={500} placeholder="Ex.: DE 60549 Frankfurt" /><Choice label="Profil de rutare" value={form.routingMode} options={Object.entries(routingModeLabels)} onChange={(routingMode) => setForm({ ...form, routingMode: routingMode as RoutingMode })} /><Text style={detail.hint}>După salvare, destinația va fi identificată când este folosită de hartă sau mesaj.</Text></> : <><Row label="Disponibilitate" value={availabilityText(vehicle.availability)} /><Row label="Destinație introdusă" value={unspecified(vehicle.destination)} /><Row label="Destinație identificată" value={unspecified(vehicle.destinationFormattedAddress)} /><Row label="Cod poștal destinație" value={unspecified(vehicle.destinationPostcode)} /><Row label="Profil de rutare" value={routingModeLabels[vehicle.routingMode]} />{vehicle.destinationGeocodingError && <Message error>{vehicle.destinationGeocodingError}</Message>}</>}</Section>;
+  const tripDestinationLabel = form.availability === 'HEADING_TO_PICKUP' ? 'adresa de ridicare' : form.availability === 'ON_TRIP' ? 'adresa de livrare' : null;
+  const changeAvailability = (value: string) => {
+    const availability = value as Form['availability'];
+    let destination = form.destination;
+    if (vehicle.currentTrip) {
+      if (availability === 'HEADING_TO_PICKUP') destination = vehicle.currentTrip.pickupAddress;
+      if (availability === 'ON_TRIP') destination = vehicle.currentTrip.deliveryAddress ?? '';
+      if (availability === 'AVAILABLE') destination = '';
+    }
+    setForm({ ...form, availability, destination });
+  };
+  return <Section title="Disponibilitate și destinație">{editing ? <><Choice label="Disponibilitate" value={form.availability} options={[['null', 'Nespecificat'], ...Object.entries(availabilityLabels)]} onChange={changeAvailability} /><Field label="Destinație" value={form.destination} onChangeText={(destination) => setForm({ ...form, destination })} maxLength={1000} placeholder="Ex.: DE 60549 Frankfurt" /><Choice label="Profil de rutare" value={form.routingMode} options={Object.entries(routingModeLabels)} onChange={(routingMode) => setForm({ ...form, routingMode: routingMode as RoutingMode })} /><Text style={detail.hint}>{vehicle.currentTrip && tripDestinationLabel ? `Modificarea destinației actualizează și ${tripDestinationLabel} din cursa curentă. ` : ''}După salvare, destinația va fi identificată când este folosită de hartă sau mesaj.</Text></> : <><Row label="Disponibilitate" value={availabilityText(vehicle.availability)} /><Row label="Destinație introdusă" value={unspecified(vehicle.destination)} />{vehicle.currentTrip && vehicle.availability === 'ON_TRIP' && !vehicle.destination && <Message>Destinația de livrare nu a fost încă stabilită.</Message>}<Row label="Destinație identificată" value={unspecified(vehicle.destinationFormattedAddress)} /><Row label="Cod poștal destinație" value={unspecified(vehicle.destinationPostcode)} /><Row label="Profil de rutare" value={routingModeLabels[vehicle.routingMode]} />{vehicle.destinationGeocodingError && <Message error>{vehicle.destinationGeocodingError}</Message>}</>}</Section>;
 }
 
 function DriverProfileTab({ vehicle, form, editing, setForm }: { vehicle: Vehicle; form: Form; editing: boolean; setForm: (form: Form) => void }) {
