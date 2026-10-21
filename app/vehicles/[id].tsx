@@ -153,7 +153,7 @@ export default function VehicleScreen() {
       <ScrollView style={detail.scroll} contentContainerStyle={[ui.content, detail.content]} keyboardShouldPersistTaps="handled">
         {error && <Message error>{error}</Message>}{message && <Message>{message}</Message>}
         {tab === 'overview' && <Overview vehicle={vehicle} issues={issues} wide={wide} onTab={setTab} onEdit={startEditing} onRefresh={() => void manualRefresh()} refreshing={refreshing} />}
-        {tab === 'trip' && <TripTab vehicle={vehicle} onCreate={() => router.push('/trips/new')} onSaved={updateVehicle} />}
+        {tab === 'trip' && <TripTab vehicle={vehicle} onCreate={() => router.push({ pathname: '/trips/new', params: { vehicleId: vehicle.id } })} onSaved={updateVehicle} />}
         {tab === 'map' && <MapTab vehicle={vehicle} config={mapConfig} fleet={fleet} route={route} error={mapError} refreshing={mapRefreshing} lastUpdatedAt={lastMapUpdatedAt} onRefresh={() => void refreshMap()} onOpenVehicle={(vehicleId) => router.push(`/vehicles/${vehicleId}`)} />}
         {tab === 'history' && <HistoryTab history={history} date={historyDate} loading={historyLoading} error={historyError} onDate={setHistoryDate} onRetry={() => void loadHistory(historyDate)} />}
         {tab === 'operations' && <OperationsTab vehicle={vehicle} form={form} editing={editing === 'operations'} setForm={setForm} />}

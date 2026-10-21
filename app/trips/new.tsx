@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { upload } from '@vercel/blob/client';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { AppShell } from '@/components/app-shell';
@@ -30,6 +30,8 @@ const groups = [
 
 export default function NewTripScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ vehicleId?: string | string[] }>();
+  const requestedVehicleId = Array.isArray(params.vehicleId) ? params.vehicleId[0] : params.vehicleId;
   const { width } = useWindowDimensions();
   const twoColumns = width >= 780;
   const [form, setForm] = useState<Form>(empty);
@@ -44,9 +46,21 @@ export default function NewTripScreen() {
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
 
-  useEffect(() => { api.list().then(setVehicles).catch((e) => setError(e instanceof Error ? e.message : 'Vehiculele nu pot fi încărcate.')); }, []);
+  useEffect(() => {
+    let active = true;
+    api.list().then((rows) => {
+      if (!active) return;
+      setVehicles(rows);
+      if (!requestedVehicleId) return;
+      if (rows.some((vehicle) => vehicle.id === requestedVehicleId)) setVehicleId(requestedVehicleId);
+      else setError('Vehiculul preselectat nu mai este disponibil. Alege un alt vehicul.');
+    }).catch((e) => { if (active) setError(e instanceof Error ? e.message : 'Vehiculele nu pot fi încărcate.'); });
+    return () => { active = false; };
+  }, [requestedVehicleId]);
   const selected = vehicles.find((vehicle) => vehicle.id === vehicleId);
   const set = (key: string, value: string) => { setForm((current) => ({ ...current, [key]: value })); setRed((current) => { const next = new Set(current); if (value.trim()) next.delete(key); return next; }); };
+  const selectVehicle = (id: string) => { setVehicleId(id); setConflict(false); setError(null); };
+  const changeVehicle = () => { setVehicleId(''); setConflict(false); setError(null); };
 
   const chooseDocument = async (source: 'files' | 'camera' = 'files') => {
     setError(null);
@@ -118,11 +132,12 @@ export default function NewTripScreen() {
       </Section>
       <Section title="Vehicul și status inițial">
         <Text style={page.help}>Cursa se salvează direct cu statusul „Către preluare cursă”. Adresa de livrare poate fi completată ulterior.</Text>
-        <View style={page.vehicleGrid}>{vehicles.map((vehicle) => <Pressable key={vehicle.id} onPress={() => setVehicleId(vehicle.id)} style={[page.vehicle, vehicleId === vehicle.id && page.vehicleActive]}><Text style={page.vehiclePlate}>{vehicle.registrationNumber}</Text><Text style={page.help}>{vehicle.driverName ?? 'Șofer nespecificat'}{vehicle.currentTrip ? ' · are cursă' : ''}</Text></Pressable>)}</View>
+        {selected ? <View style={page.selectedVehicle}><View style={[page.vehicle, page.vehicleActive]}><Text style={page.vehiclePlate}>{selected.registrationNumber}</Text><Text style={page.help}>{selected.driverName ?? 'Șofer nespecificat'}{selected.currentTrip ? ' · are cursă' : ''}</Text></View><Button secondary title="Schimbă vehiculul" onPress={changeVehicle} /></View>
+          : <View style={page.vehicleGrid}>{vehicles.map((vehicle) => <Pressable key={vehicle.id} onPress={() => selectVehicle(vehicle.id)} style={page.vehicle}><Text style={page.vehiclePlate}>{vehicle.registrationNumber}</Text><Text style={page.help}>{vehicle.driverName ?? 'Șofer nespecificat'}{vehicle.currentTrip ? ' · are cursă' : ''}</Text></Pressable>)}</View>}
       </Section>
       {groups.map((group) => <Section key={group.title} title={group.title}><View style={[page.fields, twoColumns && page.fieldsWide]}>{group.fields.map(([key, label]) => <MarkedField key={key} fieldKey={key} label={label} value={form[key]} required={required.includes(key)} yellow={yellow.has(key)} red={red.has(key)} wide={twoColumns} onChange={(value) => set(key, value)} />)}</View></Section>)}
       {extraction?.additionalData?.length ? <Section title="Alte informații din document">{extraction.additionalData.map((item, index) => <View key={`${item.label}-${index}`} style={page.extra}><Text style={page.extraLabel}>{item.label}</Text><Text style={page.extraValue}>{item.value}</Text></View>)}</Section> : null}
-      {conflict && <View style={page.conflict}><Text style={page.conflictTitle}>Vehiculul {selected?.registrationNumber} are deja o cursă.</Text><Text style={page.help}>Dacă suprascrii, cursa curentă și documentul ei original sunt șterse definitiv.</Text><View style={page.actions}><Button title="Suprascrie cursa" onPress={() => void save(true)} disabled={saving} /><Button secondary title="Alege alt vehicul" onPress={() => setConflict(false)} /></View></View>}
+      {conflict && <View style={page.conflict}><Text style={page.conflictTitle}>Vehiculul {selected?.registrationNumber} are deja o cursă.</Text><Text style={page.help}>Dacă suprascrii, cursa curentă și documentul ei original sunt șterse definitiv.</Text><View style={page.actions}><Button title="Suprascrie cursa" onPress={() => void save(true)} disabled={saving} /><Button secondary title="Alege alt vehicul" onPress={changeVehicle} /></View></View>}
       <View style={page.footer}><Button title="Salvează și asignează" onPress={() => void save()} disabled={saving || loading} /><Button secondary title="Anulează" onPress={() => void cancel()} disabled={saving} /></View>
     </ScrollView>
   </AppShell>;
@@ -136,7 +151,7 @@ function MarkedField({ fieldKey, label, value, required: isRequired, yellow, red
 const page = StyleSheet.create({
   content: { paddingTop: 16, paddingBottom: 40 }, help: { color: colors.muted, fontSize: 12, lineHeight: 18 }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' }, progress: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   file: { flexDirection: 'row', gap: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.panel2, padding: 12, borderRadius: 10 }, fileName: { color: colors.text, fontWeight: '800' },
-  vehicleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, vehicle: { minWidth: 180, flexGrow: 1, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg }, vehicleActive: { borderColor: colors.accent, backgroundColor: '#16345b' }, vehiclePlate: { color: colors.text, fontWeight: '900' },
+  vehicleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, selectedVehicle: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'stretch' }, vehicle: { minWidth: 180, flexGrow: 1, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg }, vehicleActive: { borderColor: colors.accent, backgroundColor: '#16345b' }, vehiclePlate: { color: colors.text, fontWeight: '900' },
   fields: { gap: 12 }, fieldsWide: { flexDirection: 'row', flexWrap: 'wrap' }, fieldWrap: { width: '100%', gap: 3 }, fieldWide: { width: '48.8%', flexGrow: 1 }, fieldLabel: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 }, fieldLabelText: { color: colors.muted, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' }, yellow: { color: colors.yellow, fontSize: 10, fontWeight: '900' }, red: { color: colors.danger, fontSize: 10, fontWeight: '900' }, inputYellow: { borderColor: colors.yellow }, inputRed: { borderColor: colors.danger, borderWidth: 2 },
   extra: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 9 }, extraLabel: { color: colors.muted, fontSize: 11, fontWeight: '800' }, extraValue: { color: colors.text, marginTop: 3 },
   conflict: { padding: 16, gap: 10, borderRadius: 14, borderWidth: 1, borderColor: colors.orange, backgroundColor: '#3b2a0d' }, conflictTitle: { color: colors.text, fontSize: 17, fontWeight: '900' }, footer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }
