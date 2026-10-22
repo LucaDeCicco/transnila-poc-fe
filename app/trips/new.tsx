@@ -19,7 +19,7 @@ const empty: Form = {
   cargoDescription: '', cargoQuantity: '', cargoPackageType: '', cargoDimensions: '', cargoWeightKg: '', cargoVolumeM3: '', cargoLoadingMeters: '', cargoPallets: '', cargoParcels: '', cargoDangerous: '', cargoStackable: '', cargoTemperatureC: '',
   priceAmount: '', currency: '', vatRate: '', vatAmount: '', totalAmount: '', paymentTerms: '', invoicingInstructions: '', operationalInstructions: '', contractualNotes: ''
 };
-const required = ['orderNumber', 'clientName', 'pickupLocalDate', 'pickupLocalTime', 'deliveryLocalDate', 'deliveryLocalTime', 'priceAmount', 'currency'];
+const required = ['orderNumber', 'pickupLocalDate', 'deliveryLocalDate'];
 const locationKeys = new Set(['Company', 'Address', 'City', 'Postcode', 'Country', 'CountryCode', 'GoogleMapsUrl']);
 const numeric = new Set(['cargoQuantity', 'cargoWeightKg', 'cargoVolumeM3', 'cargoLoadingMeters', 'cargoPallets', 'cargoParcels', 'cargoTemperatureC', 'priceAmount', 'vatRate', 'vatAmount', 'totalAmount']);
 const booleans = new Set(['cargoDangerous', 'cargoStackable']);
@@ -189,6 +189,7 @@ export default function NewTripScreen() {
 
 function requiredFields(form: Form, hasDelivery: boolean) {
   const fields = new Set(required);
+  if (form.priceAmount.trim()) fields.add('currency');
   if (!form.pickupGoogleMapsUrl.trim()) { fields.add('pickupPostcode'); fields.add('pickupCountry'); }
   if (hasDelivery && !form.deliveryGoogleMapsUrl.trim()) { fields.add('deliveryPostcode'); fields.add('deliveryCountry'); }
   return fields;
@@ -198,10 +199,10 @@ function tripValidationIssues(form: Form, selected: Vehicle | undefined,
   pickup: { value: ConfirmedLocation | null; confirmed: boolean },
   delivery: { value: ConfirmedLocation | null; confirmed: boolean }, hasDelivery: boolean) {
   const labels: Record<string, string> = {
-    orderNumber: 'numărul comenzii', clientName: 'clientul', pickupPostcode: 'codul poștal pentru ridicare',
-    pickupCountry: 'țara pentru ridicare', pickupLocalDate: 'data ridicării', pickupLocalTime: 'ora ridicării',
+    orderNumber: 'numărul comenzii', pickupPostcode: 'codul poștal pentru ridicare',
+    pickupCountry: 'țara pentru ridicare', pickupLocalDate: 'data ridicării',
     deliveryPostcode: 'codul poștal pentru livrare', deliveryCountry: 'țara pentru livrare',
-    deliveryLocalDate: 'data livrării', deliveryLocalTime: 'ora livrării', priceAmount: 'prețul', currency: 'moneda'
+    deliveryLocalDate: 'data livrării', currency: 'moneda'
   };
   const issues: string[] = [];
   if (!selected) issues.push('Selectează vehiculul care va efectua cursa.');
