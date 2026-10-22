@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { availabilityLabels } from '../lib/format';
 import { Availability, Vehicle } from '../types/vehicle';
-import { Button, colors, Field, Message } from './ui';
+import { Button, colors, Message } from './ui';
 
 export function QuickEditVehicle({ vehicle, visible, onClose, onSave }: {
   vehicle: Vehicle | null;
@@ -11,7 +11,6 @@ export function QuickEditVehicle({ vehicle, visible, onClose, onSave }: {
   onSave: (vehicle: Vehicle) => void;
 }) {
   const [status, setStatus] = useState<Availability | 'null'>('null');
-  const [destination, setDestination] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmRemoval, setConfirmRemoval] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +18,6 @@ export function QuickEditVehicle({ vehicle, visible, onClose, onSave }: {
   useEffect(() => {
     if (!vehicle) return;
     setStatus(vehicle.availability ?? 'null');
-    setDestination(vehicle.destination ?? '');
     setConfirmRemoval(false);
     setError(null);
   }, [vehicle, visible]);
@@ -29,10 +27,14 @@ export function QuickEditVehicle({ vehicle, visible, onClose, onSave }: {
     if (vehicle.currentTrip && status === 'AVAILABLE' && !confirmRemoval) {
       setConfirmRemoval(true); setError('Statusul Disponibil șterge definitiv cursa curentă și documentul original. Apasă din nou „Confirmă și salvează”.'); return;
     }
+    if (vehicle.currentTrip && status !== 'AVAILABLE' && status !== 'null' && status !== vehicle.availability) {
+      const location = status === 'HEADING_TO_PICKUP' ? vehicle.currentTrip.pickupLocation : vehicle.currentTrip.deliveryLocation;
+      if (!location) return setError(`Confirmă locația de ${status === 'HEADING_TO_PICKUP' ? 'ridicare' : 'livrare'} din pagina vehiculului înainte de schimbarea statusului.`);
+    }
     setSaving(true); setError(null);
     try {
       const { api } = await import('../lib/api');
-      const updated = await api.patch(vehicle.id, { availability: status === 'null' ? null : status, destination });
+      const updated = await api.patch(vehicle.id, { availability: status === 'null' ? null : status });
       onSave(updated); onClose();
     } catch (e) { setError(e instanceof Error ? e.message : 'Modificarea nu a putut fi salvată.'); }
     finally { setSaving(false); }
@@ -47,15 +49,9 @@ export function QuickEditVehicle({ vehicle, visible, onClose, onSave }: {
             {[['null', 'Nespecificat'], ...Object.entries(availabilityLabels)].map(([key, label]) => <Pressable key={key} onPress={() => {
               const nextStatus = key as Availability | 'null';
               setStatus(nextStatus); setConfirmRemoval(false);
-              if (vehicle?.currentTrip) {
-                if (nextStatus === 'HEADING_TO_PICKUP') setDestination(vehicle.currentTrip.pickupAddress);
-                if (nextStatus === 'ON_TRIP') setDestination(vehicle.currentTrip.deliveryAddress ?? '');
-                if (nextStatus === 'AVAILABLE') setDestination('');
-              }
             }} style={[modal.choice, status === key && modal.choiceActive]}><Text style={modal.choiceText}>{label}</Text></Pressable>)}
           </View></View>
-          <Field label="Destinație" value={destination} onChangeText={setDestination} maxLength={1000} placeholder="Ex.: DE 60549 Frankfurt" />
-          <Text style={modal.hint}>{vehicle?.currentTrip ? `Modificarea actualizează și ${status === 'HEADING_TO_PICKUP' ? 'adresa de ridicare' : status === 'ON_TRIP' ? 'adresa de livrare' : 'destinația operațională'} din cursa curentă.` : 'Destinația va fi identificată de backend când este folosită pentru hartă sau mesaj.'}</Text>
+          <Text style={modal.hint}>{vehicle?.currentTrip ? 'Destinațiile se modifică și se confirmă cu minimapa din pagina vehiculului, în Cursa curentă sau Operațiuni.' : 'Destinația se poate defini și confirma independent din Operațiuni, în pagina vehiculului.'}</Text>
           {error && <Message error>{error}</Message>}
           <View style={modal.actions}><Button title={confirmRemoval ? 'Confirmă și salvează' : 'Salvează'} onPress={() => void save()} disabled={saving} /><Button secondary title="Anulează" onPress={onClose} /></View>
         </ScrollView>

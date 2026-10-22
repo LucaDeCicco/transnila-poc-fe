@@ -1,4 +1,4 @@
-import { AvailabilityMessageResponse, BlobReference, Driver, ExtractionResult, FleetRefreshStatus, LiveFleetResponse, MapConfig, RefreshResponse, TripSearchResult, Vehicle, VehicleHistory, VehicleRoute } from '../types/vehicle';
+import { AvailabilityMessageResponse, BlobReference, ConfirmedLocation, Driver, ExtractionResult, FleetRefreshStatus, LiveFleetResponse, LocationInput, MapConfig, RefreshResponse, TripSearchResult, Vehicle, VehicleHistory, VehicleRoute } from '../types/vehicle';
 
 export const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
 if (!API_BASE) console.warn('EXPO_PUBLIC_API_BASE_URL nu este configurat.');
@@ -9,8 +9,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init, headers: { 'content-type': 'application/json', ...init?.headers }
   });
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new ApiError(payload?.message ?? `Cererea a eșuat (${response.status}).`, response.status, payload);
+  if (!response.ok) throw new ApiError(errorMessage(payload, response.status), response.status, payload);
   return payload as T;
+}
+
+function errorMessage(payload: { message?: unknown } | null, status: number) {
+  if (Array.isArray(payload?.message)) {
+    const messages = payload.message.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()));
+    if (messages.length) return messages.join(' ');
+  }
+  if (typeof payload?.message === 'string' && payload.message.trim() && payload.message !== 'Internal server error') {
+    return payload.message;
+  }
+  if (status === 503) return 'Serviciul solicitat nu este disponibil momentan. Încearcă din nou.';
+  if (status >= 500) return 'A apărut o problemă internă. Încearcă din nou.';
+  return `Cererea nu a putut fi procesată (${status}).`;
 }
 
 export class ApiError extends Error {
@@ -21,6 +34,7 @@ export const api = {
   list: (activeOnly = true) => request<Vehicle[]>(`/vehicles?activeOnly=${activeOnly}`),
   get: (id: string) => request<Vehicle>(`/vehicles/${encodeURIComponent(id)}`),
   patch: (id: string, data: object) => request<Vehicle>(`/vehicles/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  updateVehicleDestination: (id: string, data: LocationInput & { resolution: ConfirmedLocation }) => request<Vehicle>(`/vehicles/${encodeURIComponent(id)}/destination`, { method: 'PATCH', body: JSON.stringify(data) }),
   fleetRefreshStatus: () => request<FleetRefreshStatus>('/refresh/fleet/status'),
   mapConfig: () => request<MapConfig>('/map/config'),
   liveFleet: () => request<LiveFleetResponse>('/map/live', { method: 'POST' }),
@@ -33,9 +47,10 @@ export const api = {
   autoVehicle: (id: string) => request<RefreshResponse>(`/refresh/vehicles/${encodeURIComponent(id)}/auto`, { method: 'POST' }),
   manualVehicle: (id: string) => request<RefreshResponse>(`/refresh/vehicles/${encodeURIComponent(id)}/manual`, { method: 'POST' })
   ,extractTrip: (blob: BlobReference) => request<ExtractionResult>('/trips/extract', { method: 'POST', body: JSON.stringify(blob) }),
+  resolveLocation: (data: LocationInput) => request<ConfirmedLocation>('/trips/locations/resolve', { method: 'POST', body: JSON.stringify(data) }),
   cancelTripUpload: (blobUrl: string) => request<{ deleted: boolean }>('/trips/cancel-upload', { method: 'POST', body: JSON.stringify({ blobUrl }) }),
   assignTrip: (vehicleId: string, data: object) => request<Vehicle>(`/trips/vehicles/${encodeURIComponent(vehicleId)}`, { method: 'PUT', body: JSON.stringify(data) }),
-  updateTripAddresses: (vehicleId: string, data: { pickupAddress?: string; deliveryAddress?: string | null }) => request<Vehicle>(`/trips/vehicles/${encodeURIComponent(vehicleId)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  updateTripLocation: (vehicleId: string, kind: 'pickup' | 'delivery', data: LocationInput & { resolution: ConfirmedLocation }) => request<Vehicle>(`/trips/vehicles/${encodeURIComponent(vehicleId)}/locations/${kind}`, { method: 'PATCH', body: JSON.stringify(data) }),
   search: (query: string) => request<TripSearchResult[]>(`/search?q=${encodeURIComponent(query)}`),
   tripDocumentUrl: (vehicleId: string) => `${API_BASE}/trips/vehicles/${encodeURIComponent(vehicleId)}/document`
   ,drivers: (activeOnly = true) => request<Driver[]>(`/drivers?activeOnly=${activeOnly}`),

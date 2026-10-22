@@ -10,6 +10,8 @@ export interface Vehicle {
   destinationGeocodedQuery: string | null; destinationLatitude: number | null; destinationLongitude: number | null;
   destinationFormattedAddress: string | null; destinationCountry: string | null; destinationCountryCode: string | null;
   destinationCity: string | null; destinationPostcode: string | null; destinationGeocodingConfidence: number | null;
+  destinationLocationPrecision: 'EXACT' | 'APPROXIMATE' | null; destinationLocationConfirmedAt: string | null;
+  destinationLocationInput: LocationInput | null; destinationLocation: ConfirmedLocation | null;
   destinationGeocodedAt: string | null; destinationGeocodingError: string | null; destinationGeocodingErrorAt: string | null;
   isAvailableSoon: boolean; availableSoonStraightLineDistanceMeters: number | null;
   availableSoonRoadDistanceMeters: number | null; availableSoonRouteCalculatedAt: string | null;
@@ -37,8 +39,8 @@ export interface Driver {
 export interface Trip {
   id: string; vehicleId: string; status: Availability; orderNumber: string; externalReference: string | null; orderDate: string | null;
   clientName: string; clientVat: string | null; clientAddress: string | null; clientContactName: string | null; clientContactEmail: string | null; clientContactPhone: string | null;
-  pickupCompany: string | null; pickupAddress: string; pickupCity: string | null; pickupPostcode: string | null; pickupCountry: string | null; pickupCountryCode: string | null; pickupLocalDate: string; pickupLocalTime: string; pickupTimeZone: string | null; pickupContactName: string | null; pickupContactPhone: string | null; pickupReference: string | null; pickupInstructions: string | null;
-  deliveryCompany: string | null; deliveryAddress: string | null; deliveryCity: string | null; deliveryPostcode: string | null; deliveryCountry: string | null; deliveryCountryCode: string | null; deliveryLocalDate: string; deliveryLocalTime: string; deliveryTimeZone: string | null; deliveryContactName: string | null; deliveryContactPhone: string | null; deliveryReference: string | null; deliveryInstructions: string | null;
+  pickupCompany: string | null; pickupAddress: string; pickupCity: string | null; pickupPostcode: string | null; pickupCountry: string | null; pickupCountryCode: string | null; pickupLocalDate: string; pickupLocalTime: string; pickupTimeZone: string | null; pickupContactName: string | null; pickupContactPhone: string | null; pickupReference: string | null; pickupInstructions: string | null; pickupGoogleMapsUrl: string | null; pickupLocation: ConfirmedLocation | null;
+  deliveryCompany: string | null; deliveryAddress: string | null; deliveryCity: string | null; deliveryPostcode: string | null; deliveryCountry: string | null; deliveryCountryCode: string | null; deliveryLocalDate: string; deliveryLocalTime: string; deliveryTimeZone: string | null; deliveryContactName: string | null; deliveryContactPhone: string | null; deliveryReference: string | null; deliveryInstructions: string | null; deliveryGoogleMapsUrl: string | null; deliveryLocation: ConfirmedLocation | null;
   cargoDescription: string | null; cargoQuantity: number | null; cargoPackageType: string | null; cargoDimensions: string | null; cargoWeightKg: number | null; cargoVolumeM3: number | null; cargoLoadingMeters: number | null; cargoPallets: number | null; cargoParcels: number | null; cargoDangerous: boolean | null; cargoStackable: boolean | null; cargoTemperatureC: number | null;
   priceAmount: number; currency: string; vatRate: number | null; vatAmount: number | null; totalAmount: number | null; paymentTerms: string | null; invoicingInstructions: string | null; operationalInstructions: string | null; contractualNotes: string | null;
   assignedDriverName: string | null; assignedDriverPhone: string | null; assignedRegistrationNumber: string;
@@ -50,6 +52,15 @@ export interface TripSearchResult { vehicleId: string; registrationNumber: strin
 export interface BlobReference { blobUrl: string; pathname: string; originalName: string; contentType: string; size: number }
 export interface ExtractedField { value: string | null; confidence: number; sourceText: string | null }
 export interface ExtractionResult { fields: Record<string, ExtractedField>; additionalData: { label: string; value: string }[]; documentWarnings: string[]; usage?: unknown }
+export interface LocationInput {
+  company?: string | null; address?: string | null; city?: string | null; postcode?: string | null; country?: string | null;
+  countryCode?: string | null; googleMapsUrl?: string | null;
+}
+export interface ConfirmedLocation {
+  inputKey: string; latitude: number; longitude: number; formattedAddress: string; country: string; countryCode: string;
+  city: string; postcode: string | null; precision: 'EXACT' | 'APPROXIMATE'; source: 'GEOCODING' | 'POSTCODE' | 'GOOGLE_MAPS';
+  confidence: number | null; resultType: string | null; warning: string | null;
+}
 export interface RefreshResponse {
   performed: boolean; success?: boolean; reason?: string; error?: string; nextAllowedAt?: string;
   retryAfter?: number; vehicle?: Vehicle; updated?: number; skipped?: unknown[]; failed?: unknown[];
@@ -64,7 +75,7 @@ export interface LiveFleetResponse extends RefreshResponse {
 export interface VehicleRoute {
   status: 'ready' | 'unavailable'; warning?: string | null;
   feature?: GeoJSON.Feature<GeoJSON.LineString | GeoJSON.MultiLineString>;
-  destination?: { latitude: number; longitude: number; formattedAddress: string };
+  destination?: { latitude: number; longitude: number; formattedAddress: string; precision?: string | null };
   distanceMeters?: number | null; durationSeconds?: number | null; routingMode?: RoutingMode;
 }
 export interface VehicleTripHistoryEvent {
