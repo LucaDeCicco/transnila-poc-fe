@@ -10,6 +10,7 @@ export default function RootLayout() {
       <Stack.Screen name="map" options={{ headerShown: false }} />
       <Stack.Screen name="availability" options={{ headerShown: false }} />
       <Stack.Screen name="attention" options={{ headerShown: false }} />
+      <Stack.Screen name="find-work" options={{ headerShown: false }} />
       <Stack.Screen name="vehicles/index" options={{ headerShown: false }} />
       <Stack.Screen name="vehicles/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="trips/new" options={{ headerShown: false }} />

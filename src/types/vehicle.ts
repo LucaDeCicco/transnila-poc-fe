@@ -44,7 +44,7 @@ export interface Trip {
   cargoDescription: string | null; cargoQuantity: number | null; cargoPackageType: string | null; cargoDimensions: string | null; cargoWeightKg: number | null; cargoVolumeM3: number | null; cargoLoadingMeters: number | null; cargoPallets: number | null; cargoParcels: number | null; cargoDangerous: boolean | null; cargoStackable: boolean | null; cargoTemperatureC: number | null;
   priceAmount: number | null; currency: string | null; vatRate: number | null; vatAmount: number | null; totalAmount: number | null; paymentTerms: string | null; invoicingInstructions: string | null; operationalInstructions: string | null; contractualNotes: string | null;
   assignedDriverName: string | null; assignedDriverPhone: string | null; assignedRegistrationNumber: string;
-  sourceDocumentType: 'PDF' | 'IMAGE' | null; sourceDocumentUrl: string | null; sourceDocumentPathname: string | null;
+  sourceDocumentType: 'PDF' | 'IMAGE' | 'DOCUMENT' | null; sourceDocumentUrl: string | null; sourceDocumentPathname: string | null;
   sourceDocumentOriginalName: string | null; sourceDocumentContentType: string | null; sourceDocumentSize: number | null;
   extraction: Record<string, unknown> | null; additionalData: unknown; createdAt: string; updatedAt: string;
 }
@@ -52,6 +52,39 @@ export interface TripSearchResult { vehicleId: string; registrationNumber: strin
 export interface BlobReference { blobUrl: string; pathname: string; originalName: string; contentType: string; size: number }
 export interface ExtractedField { value: string | null; confidence: number; sourceText: string | null }
 export interface ExtractionResult { fields: Record<string, ExtractedField>; additionalData: { label: string; value: string }[]; documentWarnings: string[]; usage?: unknown }
+export type OfferStatus = 'NEW' | 'NEEDS_REVIEW' | 'CONVERTED';
+export interface TransportOffer {
+  id: string; status: OfferStatus; confidence: number; title: string | null; clientName: string | null;
+  pickupAddress: string | null; pickupCity: string | null; pickupPostcode: string | null; pickupCountry: string | null;
+  deliveryAddress: string | null; deliveryCity: string | null; deliveryPostcode: string | null; deliveryCountry: string | null;
+  pickupLocalDate: string | null; pickupLocalTime: string | null; deliveryLocalDate: string | null; deliveryLocalTime: string | null;
+  cargoDescription: string | null; cargoWeightKg: number | null; cargoPallets: number | null; priceAmount: number | null; currency: string | null;
+  senderName: string | null; senderEmail: string | null; receivedAt: string; emailWebUrl: string;
+  warnings: string[] | null; message: { subject: string | null; excerpt: string | null; classification: string | null; classificationReason: string | null };
+  attachment: { id: string; filename: string; contentType: string; size: number; documentType: 'PDF' | 'IMAGE' | 'DOCUMENT' } | null;
+  convertedTrip: { id: string; vehicleId: string } | null;
+}
+export interface OfferSyncProgress {
+  performed?: boolean; collected?: number; processed?: number; createdOffers?: number;
+  pending?: number; processing?: number; failed?: number;
+  queue?: { pending: number; processing: number; failed: number };
+  collectionHasMore?: boolean; hasMore?: boolean; lastSyncAt?: string | null; reason?: string; error?: string;
+  integration?: OfferIntegrationStatus;
+}
+export type OfferIntegrationStatusCode = 'GMAIL_NOT_CONFIGURED' | 'AI_NOT_CONFIGURED' | 'READY' | 'DEGRADED';
+export interface OfferIntegrationStatus {
+  gmailConfigured: boolean; offerExtractionConfigured: boolean; ready: boolean; status: OfferIntegrationStatusCode;
+  degradedService?: 'GMAIL' | 'AI' | null;
+}
+export interface OfferProcessingIssue {
+  id: string; subject: string | null; senderName: string | null; senderEmail: string | null;
+  receivedAt: string; emailWebUrl: string; reason: string;
+}
+export interface OffersResponse {
+  offers: TransportOffer[]; processingIssues: OfferProcessingIssue[]; integration: OfferIntegrationStatus;
+  lastSyncAt: string | null; lastSyncError: string | null; sync?: OfferSyncProgress;
+}
+export interface OfferTripPrefill { offer: TransportOffer; fields: Record<string, ExtractedField>; extraction: ExtractionResult; blob: BlobReference | null }
 export interface LocationInput {
   company?: string | null; address?: string | null; city?: string | null; postcode?: string | null; country?: string | null;
   countryCode?: string | null; googleMapsUrl?: string | null;

@@ -7,10 +7,11 @@ import { api } from '@/lib/api';
 import { TripSearchResult } from '@/types/vehicle';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
-export type AppSection = 'operations' | 'map' | 'vehicles' | 'availability' | 'drivers' | 'attention';
+export type AppSection = 'operations' | 'findWork' | 'map' | 'vehicles' | 'availability' | 'drivers' | 'attention';
 
 const navigation: { key: AppSection; label: string; compactLabel?: string; icon: IconName; route: Href; mobile?: boolean }[] = [
   { key: 'operations', label: 'Operațiuni', icon: 'grid-outline', route: '/' },
+  { key: 'findWork', label: 'Găsește curse', compactLabel: 'Oferte', icon: 'briefcase-outline', route: '/find-work' },
   { key: 'map', label: 'Hartă', icon: 'map-outline', route: '/map' },
   { key: 'vehicles', label: 'Vehicule', icon: 'car-outline', route: '/vehicles' },
   { key: 'drivers', label: 'Șoferi', icon: 'people-outline', route: '/drivers', mobile: false },

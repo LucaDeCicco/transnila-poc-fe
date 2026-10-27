@@ -1,4 +1,4 @@
-import { AvailabilityMessageResponse, BlobReference, ConfirmedLocation, Driver, ExtractionResult, FleetRefreshStatus, LiveFleetResponse, LocationInput, MapConfig, RefreshResponse, TripSearchResult, Vehicle, VehicleHistory, VehicleRoute } from '../types/vehicle';
+import { AvailabilityMessageResponse, BlobReference, ConfirmedLocation, Driver, ExtractionResult, FleetRefreshStatus, LiveFleetResponse, LocationInput, MapConfig, OfferStatus, OfferSyncProgress, OffersResponse, OfferTripPrefill, RefreshResponse, TripSearchResult, Vehicle, VehicleHistory, VehicleRoute } from '../types/vehicle';
 
 export const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
 if (!API_BASE) console.warn('EXPO_PUBLIC_API_BASE_URL nu este configurat.');
@@ -57,4 +57,7 @@ export const api = {
   createDriver: (data: object) => request<Driver>('/drivers', { method: 'POST', body: JSON.stringify(data) }),
   updateDriver: (id: string, data: object) => request<Driver>(`/drivers/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),
   assignDrivers: (vehicleId: string, data: { driverIds: string[]; currentDriverId?: string | null }) => request<Vehicle>(`/vehicles/${encodeURIComponent(vehicleId)}/drivers`, { method: 'PATCH', body: JSON.stringify(data) })
+  ,offers: (status?: OfferStatus, query = '') => request<OffersResponse>(`/offers?${new URLSearchParams({ ...(status ? { status } : {}), ...(query ? { q: query } : {}) }).toString()}`),
+  refreshOffers: () => request<OfferSyncProgress>('/offers/refresh', { method: 'POST' }),
+  offerTripPrefill: (id: string) => request<OfferTripPrefill>(`/offers/${encodeURIComponent(id)}/trip-prefill`)
 };

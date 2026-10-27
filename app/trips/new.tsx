@@ -33,14 +33,17 @@ const groups = [
 
 export default function NewTripScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ vehicleId?: string | string[] }>();
+  const params = useLocalSearchParams<{ vehicleId?: string | string[]; offerId?: string | string[] }>();
   const requestedVehicleId = Array.isArray(params.vehicleId) ? params.vehicleId[0] : params.vehicleId;
+  const requestedOfferId = Array.isArray(params.offerId) ? params.offerId[0] : params.offerId;
   const { width } = useWindowDimensions();
   const twoColumns = width >= 780;
   const [form, setForm] = useState<Form>(empty);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [vehicleId, setVehicleId] = useState('');
   const [blob, setBlob] = useState<BlobReference | null>(null);
+  const [sourceOfferId, setSourceOfferId] = useState<string | null>(requestedOfferId ?? null);
+  const [sourceOwnedBlob, setSourceOwnedBlob] = useState(false);
   const [extraction, setExtraction] = useState<ExtractionResult | null>(null);
   const [yellow, setYellow] = useState<Set<string>>(new Set());
   const [red, setRed] = useState<Set<string>>(new Set());
@@ -65,6 +68,23 @@ export default function NewTripScreen() {
     return () => { active = false; };
   }, [requestedVehicleId]);
   useEffect(() => { api.mapConfig().then(setMapConfig).catch(() => undefined); }, []);
+  useEffect(() => {
+    if (!requestedOfferId) return;
+    let active = true; setLoading(true); setError(null);
+    api.offerTripPrefill(requestedOfferId).then((result) => {
+      if (!active) return;
+      const next = { ...empty }; const uncertain = new Set<string>();
+      Object.entries(result.fields).forEach(([key, field]) => { next[key] = field.value ?? ''; if (field.value === null || field.confidence < .75) uncertain.add(key); });
+      for (const prefix of ['pickup', 'delivery'] as const) {
+        next[`${prefix}CountryCode`] = next[`${prefix}CountryCode`]?.toUpperCase() || countryCodeFromName(next[`${prefix}Country`]) || '';
+        next[`${prefix}Country`] = romanianCountryName(next[`${prefix}CountryCode`], next[`${prefix}Country`] || '');
+      }
+      setForm(next); setYellow(uncertain); setExtraction(result.extraction); setBlob(result.blob);
+      setSourceOwnedBlob(Boolean(result.blob)); setSourceOfferId(result.offer.id);
+    }).catch((e) => { if (active) setError(e instanceof Error ? e.message : 'Oferta nu a putut fi încărcată.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [requestedOfferId]);
   const selected = vehicles.find((vehicle) => vehicle.id === vehicleId);
   const hasDelivery = ['Address', 'Company', 'City', 'Postcode', 'Country', 'CountryCode', 'GoogleMapsUrl']
     .some((suffix) => Boolean(form[`delivery${suffix}`]?.trim()));
@@ -105,11 +125,12 @@ export default function NewTripScreen() {
       }
       if (!API_BASE) return setError('Adresa backendului nu este configurată.');
       setLoading(true);
-      if (blob) {
+      if (blob && !sourceOwnedBlob) {
         await api.cancelTripUpload(blob.blobUrl).catch(() => undefined);
         setBlob(null);
         setExtraction(null);
       }
+      setSourceOwnedBlob(false);
       const body = asset.file ?? await (await fetch(asset.uri)).blob();
       if (body.size > 10 * 1024 * 1024) {
         return setError(`${asset.kind === 'IMAGE' ? 'Imaginea' : 'PDF-ul'} poate avea maximum 10 MB.`);
@@ -145,7 +166,7 @@ export default function NewTripScreen() {
     if (validationIssues.length) { setRed(missing); return; }
     setSaving(true); setError(null); setConflict(false);
     try {
-      const payload: Record<string, unknown> = { status: 'HEADING_TO_PICKUP', overwrite, pickupLocation: pickupLocation.value, deliveryLocation: hasDelivery ? deliveryLocation.value : undefined, extraction: extraction ?? undefined, additionalData: extraction?.additionalData ?? undefined, ...(blob ?? {}) };
+      const payload: Record<string, unknown> = { status: 'HEADING_TO_PICKUP', overwrite, sourceOfferId: sourceOfferId ?? undefined, pickupLocation: pickupLocation.value, deliveryLocation: hasDelivery ? deliveryLocation.value : undefined, extraction: extraction ?? undefined, additionalData: extraction?.additionalData ?? undefined, ...(blob ?? {}) };
       Object.entries(form).forEach(([key, value]) => {
         const clean = value.trim();
         if (!clean) return;
@@ -154,17 +175,19 @@ export default function NewTripScreen() {
       await api.assignTrip(vehicleId, payload);
       router.replace(`/vehicles/${vehicleId}?section=trip`);
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409) setConflict(true);
+      const code = e instanceof ApiError && typeof e.payload === 'object' && e.payload !== null && 'code' in e.payload
+        ? (e.payload as { code?: unknown }).code : null;
+      if (e instanceof ApiError && e.status === 409 && code === 'VEHICLE_HAS_TRIP') setConflict(true);
       else setError(e instanceof Error ? e.message : 'Cursa nu a putut fi salvată.');
     } finally { setSaving(false); }
   };
-  const cancel = async () => { if (blob) await api.cancelTripUpload(blob.blobUrl).catch(() => undefined); router.back(); };
+  const cancel = async () => { if (blob && !sourceOwnedBlob) await api.cancelTripUpload(blob.blobUrl).catch(() => undefined); router.back(); };
   const locationInput = (prefix: 'pickup' | 'delivery'): LocationInput => ({
     company: form[`${prefix}Company`] || null, address: form[`${prefix}Address`] || null,
     city: form[`${prefix}City`] || null, postcode: form[`${prefix}Postcode`] || '', country: form[`${prefix}Country`] || '',
     countryCode: form[`${prefix}CountryCode`] || null, googleMapsUrl: form[`${prefix}GoogleMapsUrl`] || null
   });
-  return <AppShell active="operations" title="Cursă nouă" subtitle="Completează manual sau importă datele dintr-un PDF ori dintr-o imagine" back>
+  return <AppShell active={sourceOfferId ? 'findWork' : 'operations'} title="Cursă nouă" subtitle={sourceOfferId ? 'Date precompletate din oferta Gmail — verifică înainte de salvare' : 'Completează manual sau importă datele dintr-un PDF ori dintr-o imagine'} back>
     <ScrollView contentContainerStyle={[ui.content, page.content]} keyboardShouldPersistTaps="handled">
       <Section title="Documentul original">
         <Text style={page.help}>Poți salva cursa fără document sau poți încărca un singur PDF ori o imagine de maximum 10 MB. Pe telefon poți alege și camera. Datele detectate sunt doar o propunere și rămân editabile.</Text>
