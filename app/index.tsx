@@ -8,7 +8,7 @@ import { QuickEditVehicle } from '@/components/quick-edit-vehicle';
 import { Button, colors, Message, styles as ui } from '@/components/ui';
 import { api } from '@/lib/api';
 import { bucharestDate, unspecified } from '@/lib/format';
-import { normalizeRegistration, positionAgeMinutes, statusTone, tachograph, vehicleIssues, vehicleLocation } from '@/lib/vehicle';
+import { normalizeRegistration, positionAgeMinutes, statusTone, tachograph, vehicleDestination, vehicleIssues, vehicleLocation } from '@/lib/vehicle';
 import { Availability, AvailabilityMessageResponse, MapConfig, Vehicle } from '@/types/vehicle';
 
 type StatusFilter = 'ALL' | Availability | 'AVAILABLE_SOON' | 'UNSPECIFIED' | 'ATTENTION';
@@ -154,6 +154,7 @@ function VehicleRow({ vehicle, desktop, staleMinutes, onOpen, onEdit }: { vehicl
   const attention = issues.filter((issue) => issue.severity === 'attention').length;
   const age = positionAgeMinutes(vehicle);
   const ageText = age === null ? 'Fără poziție' : age < 1 ? 'Acum' : age < 60 ? `${age} min` : `${Math.floor(age / 60)} h ${age % 60} min`;
+  const destination = vehicleDestination(vehicle) || 'Nespecificat';
   return <Pressable onPress={onOpen} style={({ pressed }) => [screen.vehicle, { borderLeftColor: tone.accent }, desktop && screen.vehicleDesktop, pressed && { opacity: .75 }]}>
     {desktop ? <>
       <View style={screen.colPlate}><View style={screen.plateLine}><Text style={screen.plate}>{vehicle.registrationNumber}</Text>{attention > 0 && <Ionicons name="warning" size={16} color={colors.yellow} />}</View><Text numberOfLines={1} style={screen.mini}>{vehicle.vehicleModel ?? 'Model nespecificat'}</Text></View>
@@ -161,12 +162,12 @@ function VehicleRow({ vehicle, desktop, staleMinutes, onOpen, onEdit }: { vehicl
       <View style={[screen.colStatus, screen.statusStack]}><StatusBadge value={vehicle.availability} compact />{vehicle.isAvailableSoon && <AvailableSoonBadge vehicle={vehicle} />}</View>
       <Text style={screen.colTacho}>{tachograph(vehicle.hasTachograph)}</Text>
       <Text numberOfLines={2} style={screen.colLocation}>{vehicleLocation(vehicle) || 'Nespecificat'}</Text>
-      <Text numberOfLines={2} style={screen.colDestination}>{unspecified(vehicle.destination)}</Text>
+      <Text numberOfLines={2} style={screen.colDestination}>{destination}</Text>
       <View style={screen.colUpdated}><Text style={[screen.age, attention > 0 && { color: colors.yellow }]}>{ageText}</Text></View>
       <View style={screen.colAction}><Pressable accessibilityLabel={`Actualizează ${vehicle.registrationNumber}`} onPress={(event) => { event.stopPropagation(); onEdit(); }} style={screen.rowAction}><Ionicons name="create-outline" size={19} color={colors.text} /></Pressable></View>
     </> : <>
       <View style={screen.mobileTop}><View style={{ flex: 1, minWidth: 0 }}><View style={screen.plateLine}><Text style={screen.plate}>{vehicle.registrationNumber}</Text>{attention > 0 && <Ionicons name="warning" size={17} color={colors.yellow} />}</View><Text style={screen.mini}>{vehicle.vehicleModel ?? 'Model nespecificat'} · {unspecified(vehicle.driverName)}</Text></View><View style={screen.statusStack}><StatusBadge value={vehicle.availability} compact />{vehicle.isAvailableSoon && <AvailableSoonBadge vehicle={vehicle} />}</View></View>
-      <View style={screen.mobileGrid}><MobileDatum icon="location-outline" value={vehicleLocation(vehicle) || 'Locație nespecificată'} /><MobileDatum icon="flag-outline" value={`Destinație: ${unspecified(vehicle.destination)}`} /><MobileDatum icon="speedometer-outline" value={`Tahograf: ${tachograph(vehicle.hasTachograph)}`} /><MobileDatum icon="time-outline" value={`Poziție: ${ageText}`} warning={attention > 0} /></View>
+      <View style={screen.mobileGrid}><MobileDatum icon="location-outline" value={vehicleLocation(vehicle) || 'Locație nespecificată'} /><MobileDatum icon="flag-outline" value={`Destinație: ${destination}`} /><MobileDatum icon="speedometer-outline" value={`Tahograf: ${tachograph(vehicle.hasTachograph)}`} /><MobileDatum icon="time-outline" value={`Poziție: ${ageText}`} warning={attention > 0} /></View>
       <View style={screen.mobileActions}><Pressable onPress={(event) => { event.stopPropagation(); onEdit(); }} style={screen.quickAction}><Ionicons name="create-outline" size={18} color={colors.text} /><Text style={screen.quickActionText}>Status și destinație</Text></Pressable><Text style={screen.openText}>Vezi detalii →</Text></View>
     </>}
   </Pressable>;

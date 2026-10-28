@@ -1,4 +1,5 @@
 import { Availability, Vehicle } from '../types/vehicle';
+import { romanianCountryName } from './country';
 
 export const statusColors: Record<Availability, { accent: string; surface: string; badge: string }> = {
   AVAILABLE: { accent: '#34d399', surface: '#10251f', badge: '#145c46' },
@@ -17,6 +18,14 @@ export function normalizeRegistration(value: string | null | undefined) {
 export function vehicleLocation(vehicle: Vehicle) {
   if (vehicle.postcode) return [[vehicle.postcode, vehicle.city].filter(Boolean).join(' '), vehicle.country].filter(Boolean).join(', ');
   return [vehicle.city, vehicle.country].filter(Boolean).join(', ') || vehicle.formattedAddress || '';
+}
+
+export function vehicleDestination(vehicle: Vehicle) {
+  const country = romanianCountryName(vehicle.destinationCountryCode, vehicle.destinationCountry ?? '');
+  const summary = [[vehicle.destinationPostcode, vehicle.destinationCity].filter(Boolean).join(' '), country]
+    .filter(Boolean)
+    .join(', ');
+  return summary || vehicle.destination || vehicle.destinationFormattedAddress || '';
 }
 
 export function positionAgeMinutes(vehicle: Vehicle, now = Date.now()) {
@@ -56,4 +65,3 @@ export function vehicleIssues(vehicle: Vehicle, staleMinutes = 15): VehicleIssue
   if (vehicle.hasTachograph === null) issues.push({ key: 'tachograph', severity: 'incomplete', title: 'Tahograf nespecificat', detail: 'Completează informația despre tahograf.', section: 'profile' });
   return issues;
 }
-
