@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { AppShell } from '@/components/app-shell';
 import { StatusBadge } from '@/components/fleet-ui';
@@ -243,6 +243,14 @@ function TripTab({ vehicle, config, onCreate, onSaved }: { vehicle: Vehicle; con
     setEditingAddresses(false);
   }, [trip?.id, trip?.pickupAddress, trip?.deliveryAddress]);
 
+  const openDocument = async () => {
+    const blob = await api.tripDocument(vehicle.id);
+    if (Platform.OS !== 'web') return;
+    const url = URL.createObjectURL(blob);
+    await Linking.openURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
   if (!trip) return <Section title="Cursa curentă"><View style={detail.ok}><Ionicons name="information-circle-outline" size={22} color={colors.muted} /><Text style={detail.okText}>Vehiculul nu are o cursă structurată asignată.</Text></View><View style={detail.quickActions}><Button title="Adaugă o cursă" onPress={onCreate} /></View></Section>;
   return <>
     <Section title={`Comanda ${trip.orderNumber}`}><Row label="Referință externă" value={unspecified(trip.externalReference)} /><Row label="Data comenzii" value={unspecified(trip.orderDate)} /><Row label="Client" value={unspecified(trip.clientName)} /><Row label="Cod fiscal / TVA" value={unspecified(trip.clientVat)} /><Row label="Adresă client" value={unspecified(trip.clientAddress)} /><Row label="Contact client" value={[trip.clientContactName, trip.clientContactPhone, trip.clientContactEmail].filter(Boolean).join(' · ') || 'Nespecificat'} /><View style={detail.quickActions}><Button secondary title={editingAddresses ? 'Închide editarea locațiilor' : 'Editează și confirmă locațiile'} onPress={() => setEditingAddresses(!editingAddresses)} /></View></Section>
@@ -251,7 +259,7 @@ function TripTab({ vehicle, config, onCreate, onSaved }: { vehicle: Vehicle; con
       <View style={detail.overviewColumn}><Section title="Livrare"><LocationStatus location={trip.deliveryLocation} /><Row label="Companie" value={unspecified(trip.deliveryCompany)} /><Row label="Adresă" value={unspecified(trip.deliveryAddress)} /><Row label="Cod poștal / țară" value={[trip.deliveryPostcode, romanianCountryName(trip.deliveryCountryCode, trip.deliveryCountry ?? '')].filter(Boolean).join(' · ') || 'Nespecificat'} />{!trip.deliveryAddress && <Message>Destinația de livrare nu a fost încă stabilită.</Message>}<Row label="Data și ora locală" value={formatTripDateTime(trip.deliveryLocalDate, trip.deliveryLocalTime, trip.deliveryTimeZone)} /><Row label="Contact" value={[trip.deliveryContactName, trip.deliveryContactPhone].filter(Boolean).join(' · ') || 'Nespecificat'} /><Row label="Referință" value={unspecified(trip.deliveryReference)} /><Row label="Instrucțiuni" value={unspecified(trip.deliveryInstructions)} /></Section></View></View>
     <Section title="Marfă"><Row label="Descriere" value={unspecified(trip.cargoDescription)} /><Row label="Cantitate / ambalaj" value={[trip.cargoQuantity, trip.cargoPackageType].filter((v) => v !== null).join(' · ') || 'Nespecificat'} /><Row label="Dimensiuni" value={unspecified(trip.cargoDimensions)} /><Row label="Greutate" value={trip.cargoWeightKg === null ? 'Nespecificat' : `${trip.cargoWeightKg} kg`} /><Row label="Volum / metri liniari" value={[trip.cargoVolumeM3 === null ? null : `${trip.cargoVolumeM3} m³`, trip.cargoLoadingMeters === null ? null : `${trip.cargoLoadingMeters} m`].filter(Boolean).join(' · ') || 'Nespecificat'} /><Row label="Paleți / colete" value={[trip.cargoPallets === null ? null : `${trip.cargoPallets} paleți`, trip.cargoParcels === null ? null : `${trip.cargoParcels} colete`].filter(Boolean).join(' · ') || 'Nespecificat'} /><Row label="ADR" value={trip.cargoDangerous === null ? 'Nespecificat' : trip.cargoDangerous ? 'Da' : 'Nu'} /><Row label="Stivuibil" value={trip.cargoStackable === null ? 'Nespecificat' : trip.cargoStackable ? 'Da' : 'Nu'} /></Section>
     <Section title="Tarif și condiții"><Row label="Preț" value={formatTripAmount(trip.priceAmount, trip.currency)} /><Row label="TVA" value={trip.vatRate === null ? 'Nespecificat' : `${trip.vatRate}%`} /><Row label="Total" value={formatTripAmount(trip.totalAmount, trip.currency)} /><Row label="Plată" value={unspecified(trip.paymentTerms)} /><Row label="Facturare" value={unspecified(trip.invoicingInstructions)} /><Row label="Instrucțiuni operaționale" value={unspecified(trip.operationalInstructions)} /><Row label="Note contractuale" value={unspecified(trip.contractualNotes)} /></Section>
-    <Section title="Asignare și document"><Row label="Vehicul la asignare" value={trip.assignedRegistrationNumber} /><Row label="Șofer la asignare" value={unspecified(trip.assignedDriverName)} /><Row label="Telefon la asignare" value={unspecified(trip.assignedDriverPhone)} /><Row label="Document original" value={trip.sourceDocumentOriginalName ?? 'Nu a fost atașat'} />{trip.sourceDocumentUrl && <View style={detail.quickActions}><Button title="Vezi documentul original" onPress={() => void Linking.openURL(api.tripDocumentUrl(vehicle.id))} /></View>}</Section>
+    <Section title="Asignare și document"><Row label="Vehicul la asignare" value={trip.assignedRegistrationNumber} /><Row label="Șofer la asignare" value={unspecified(trip.assignedDriverName)} /><Row label="Telefon la asignare" value={unspecified(trip.assignedDriverPhone)} /><Row label="Document original" value={trip.sourceDocumentOriginalName ?? 'Nu a fost atașat'} />{trip.sourceDocumentUrl && <View style={detail.quickActions}><Button title="Vezi documentul original" onPress={() => void openDocument()} /></View>}</Section>
   </>;
 }
 

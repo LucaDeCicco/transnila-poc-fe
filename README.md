@@ -13,7 +13,7 @@ npm run ios
 npm run android
 ```
 
-Singura variabilă este `EXPO_PUBLIC_API_BASE_URL`; nu pune aici tokenul Wialon, `sid` sau cheia Geoapify.
+Singura variabilă este `EXPO_PUBLIC_API_BASE_URL`; nu pune aici credentialele de login, secretul JWT, tokenul Wialon, `sid` sau cheia Geoapify.
 
 - Browser și iOS Simulator pe același calculator: `http://localhost:3000/api`.
 - Android Emulator standard: `http://10.0.2.2:3000/api`.
@@ -22,6 +22,8 @@ Singura variabilă este `EXPO_PUBLIC_API_BASE_URL`; nu pune aici tokenul Wialon,
 După schimbarea `.env`, repornește Metro. Pentru telefon se poate porni cu `npx expo start --lan`; dacă rețeaua blochează discovery, conexiunea către backend tot trebuie să folosească IP-ul LAN accesibil.
 
 ## Comportament
+
+Versiunea web verifică IP-ul înainte să monteze aplicația și afișează loginul temporar numai dacă accesul este permis. Tokenul este păstrat în `sessionStorage`, este atașat tuturor cererilor API și dispare la închiderea sesiunii browserului sau la apăsarea butonului „Ieșire”. Un răspuns `401` revine la login, iar codul backend `BLOCKED_IP` înlocuiește aplicația cu ecranul dedicat. Credentialele și lista de IP-uri nu sunt incluse în bundle-ul frontend.
 
 La intrarea în listă sau în detalii, aplicația afișează întâi datele persistate și apoi trimite explicit un POST de verificare automată. Backendul decide dacă intervalul de 30 minute a expirat. Cât timp ecranul de hartă este deschis, pozițiile întregii flote sunt cerute periodic la intervalul livrat de backend (implicit 60 secunde); lock-ul și intervalul global din PostgreSQL împiedică multiplicarea actualizărilor între utilizatori. Actualizarea manuală afișează rezultatele parțiale și momentul următor permis de cooldown.
 
@@ -43,7 +45,7 @@ npm run lint
 npm run export:web
 ```
 
-Exportul web verifică bundling-ul pentru browser. Compatibilitatea iOS/Android este susținută de componente React Native comune; rularea efectivă pe simulatoare/dispozitive necesită mediile native respective și un backend configurat.
+Exportul web verifică bundling-ul pentru browser. Interfața folosește componente React Native comune, dar persistența acestei autentificări temporare este implementată pentru web. Rularea efectivă pe simulatoare/dispozitive necesită ulterior un storage securizat nativ și mediile native respective.
 
 ## Deploy web pe Vercel
 
@@ -63,4 +65,4 @@ Variabila `EXPO_PUBLIC_API_BASE_URL` este inclusă în bundle la build; orice sc
 
 ## Limitări PoC
 
-Nu există autentificare, istoric operațional, mod offline cu coadă de editări sau notificări. Harta MapLibre este implementată pentru web; buildurile native afișează momentan un fallback până la integrarea MapLibre Native. Aplicația nu conține date demonstrative și arată o stare goală cu reîncercare dacă backendul ori furnizorii nu sunt disponibili la prima încărcare.
+Autentificarea PoC folosește o singură identitate comună și `sessionStorage`; nu oferă roluri, audit individual sau persistență nativă. Nu există istoric operațional, mod offline cu coadă de editări sau notificări. Harta MapLibre este implementată pentru web; buildurile native afișează momentan un fallback până la integrarea MapLibre Native. Aplicația nu conține date demonstrative și arată o stare goală cu reîncercare dacă backendul ori furnizorii nu sunt disponibili la prima încărcare.

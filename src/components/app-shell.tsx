@@ -4,6 +4,7 @@ import { Href, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { colors } from './ui';
 import { api } from '@/lib/api';
+import { useAuth } from '@/auth/auth-context';
 import { TripSearchResult } from '@/types/vehicle';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -29,6 +30,7 @@ export function AppShell({ active, title, subtitle, action, back, children }: Pr
   const { width } = useWindowDimensions();
   const desktop = width >= 900;
   const router = useRouter();
+  const { logout } = useAuth();
 
   const navigate = (route: Href) => router.push(route);
   return <View style={shell.root}>
@@ -48,7 +50,7 @@ export function AppShell({ active, title, subtitle, action, back, children }: Pr
         </View>
         {action && <View style={shell.action}>{action}</View>}
       </View>
-      <GlobalTools desktop={desktop} onNew={() => navigate('/trips/new')} onOpen={(id) => navigate(`/vehicles/${id}`)} />
+      <GlobalTools desktop={desktop} onNew={() => navigate('/trips/new')} onOpen={(id) => navigate(`/vehicles/${id}`)} onLogout={logout} />
       <View style={[shell.body, !desktop && shell.mobileBody]}>{children}</View>
       {!desktop && <View style={shell.bottomNav}>{navigation.filter((item) => item.mobile !== false).map((item) => {
         const selected = active === item.key;
@@ -61,7 +63,7 @@ export function AppShell({ active, title, subtitle, action, back, children }: Pr
   </View>;
 }
 
-function GlobalTools({ desktop, onNew, onOpen }: { desktop: boolean; onNew: () => void; onOpen: (id: string) => void }) {
+function GlobalTools({ desktop, onNew, onOpen, onLogout }: { desktop: boolean; onNew: () => void; onOpen: (id: string) => void; onLogout: () => void }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<TripSearchResult[]>([]);
   useEffect(() => {
@@ -74,6 +76,7 @@ function GlobalTools({ desktop, onNew, onOpen }: { desktop: boolean; onNew: () =
       {results.length > 0 && <View style={shell.searchResults}>{results.map((item) => <Pressable key={item.vehicleId} onPress={() => { setQuery(''); setResults([]); onOpen(item.vehicleId); }} style={shell.searchResult}><View style={{ flex: 1 }}><Text style={shell.resultTitle}>{item.registrationNumber}{item.orderNumber ? ` · ${item.orderNumber}` : ''}</Text><Text style={shell.resultText}>{item.clientName ?? item.driverName ?? 'Fără detalii comandă'}</Text></View><Ionicons name="arrow-forward" size={17} color={colors.muted} /></Pressable>)}</View>}
     </View>
     {!desktop && <Pressable accessibilityLabel="Cursă nouă" onPress={onNew} style={shell.compactNew}><Ionicons name="add" size={23} color="#fff" /></Pressable>}
+    <Pressable accessibilityLabel="Ieșire din aplicație" onPress={onLogout} style={shell.logout}><Ionicons name="log-out-outline" size={21} color={colors.muted} />{desktop && <Text style={shell.logoutText}>Ieșire</Text>}</Pressable>
   </View>;
 }
 
@@ -102,6 +105,7 @@ const shell = StyleSheet.create({
   globalTools: { minHeight: 60, paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', gap: 9, alignItems: 'center', backgroundColor: '#0d141e', borderBottomWidth: 1, borderBottomColor: colors.border, zIndex: 20 },
   globalSearch: { flex: 1, maxWidth: 720, minHeight: 42, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.panel, position: 'relative' }, globalInput: { flex: 1, color: colors.text, minWidth: 0, paddingVertical: 8 },
   searchResults: { position: 'absolute', left: 0, right: 0, top: 45, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.panel2, overflow: 'hidden', zIndex: 50, elevation: 10 }, searchResult: { minHeight: 54, paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border }, resultTitle: { color: colors.text, fontWeight: '900' }, resultText: { color: colors.muted, fontSize: 11, marginTop: 2 }, compactNew: { width: 42, height: 42, borderRadius: 10, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  logout: { minHeight: 42, paddingHorizontal: 11, borderRadius: 10, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }, logoutText: { color: colors.muted, fontWeight: '800', fontSize: 12 },
   body: { flex: 1, minHeight: 0 }, mobileBody: { paddingBottom: 70 },
   bottomNav: { position: 'absolute', left: 0, right: 0, bottom: 0, minHeight: 68, paddingTop: 7, paddingBottom: 5, paddingHorizontal: 4, flexDirection: 'row', backgroundColor: '#101722', borderTopWidth: 1, borderTopColor: colors.border },
   bottomItem: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', gap: 2 }, bottomIcon: { minWidth: 38, height: 29, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, bottomIconActive: { backgroundColor: colors.accent },

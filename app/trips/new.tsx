@@ -6,7 +6,7 @@ import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, u
 import { AppShell } from '@/components/app-shell';
 import { LocationVerification } from '@/components/location-verification';
 import { Button, colors, Field, Message, Section, styles as ui } from '@/components/ui';
-import { API_BASE, ApiError, api } from '@/lib/api';
+import { API_BASE, ApiError, api, getAuthorizationHeaders } from '@/lib/api';
 import { pickOrderDocument } from '@/lib/order-document-picker';
 import { countryCodeFromName, romanianCountryName } from '@/lib/country';
 import { BlobReference, ConfirmedLocation, ExtractionResult, LocationInput, MapConfig, Vehicle } from '@/types/vehicle';
@@ -140,7 +140,7 @@ export default function NewTripScreen() {
         : asset.type === 'image/jpeg' ? 'jpg'
           : asset.type.split('/')[1];
       const uploadName = safeName.includes('.') ? safeName : `${safeName}.${fallbackExtension}`;
-      const uploaded = await upload(`orders/${uploadName}`, body, { access: 'private', handleUploadUrl: `${API_BASE}/trips/upload`, contentType: asset.type });
+      const uploaded = await upload(`orders/${uploadName}`, body, { access: 'private', handleUploadUrl: `${API_BASE}/trips/upload`, contentType: asset.type, headers: getAuthorizationHeaders() });
       const reference = { blobUrl: uploaded.url, pathname: uploaded.pathname, originalName: asset.name, contentType: uploaded.contentType, size: asset.size || body.size };
       setBlob(reference);
       const parsed = await api.extractTrip(reference); setExtraction(parsed);
