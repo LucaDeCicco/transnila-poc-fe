@@ -1,12 +1,31 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthProvider, useAuth } from '@/auth/auth-context';
 import { colors } from '@/components/ui';
 
+const TEMPORARY_LOCKDOWN = true;
+
 export default function RootLayout() {
+  if (TEMPORARY_LOCKDOWN) return <TemporaryLockdownScreen />;
   return <AuthProvider><AccessGate /></AuthProvider>;
+}
+
+function TemporaryLockdownScreen() {
+  return <View style={lockdown.screen}>
+    <StatusBar style="light" />
+    <ScrollView contentContainerStyle={lockdown.scroll}>
+      <View style={lockdown.card}>
+        <Text style={lockdown.name}>Cristi (82.76.153.75),</Text>
+        <Text style={lockdown.paragraph}>Nu știu pe cine ai vrut să impresionezi folosind un instrument (Grafana k6/2.3.0) pentru un test de stres asupra unei aplicații aflate la nivel de PoC. După cum ai observat, nu a trebuit să faci nimic special pentru a avea acces la informațiile din interfață. Cred că era destul de clar pentru oricine că aplicația nu avea încă implementate măsuri de securitate.</Text>
+        <Text style={lockdown.paragraph}>Este, până la urmă, un PoC — o demonstrație a ceea ce putem construi pentru a vă ușura munca. În loc să te bucuri de instrument sau, de ce nu, să ne oferi sugestii pentru a-l îmbunătăți, ai preferat să încerci să ne impresionezi cu un test de stres.</Text>
+        <Text style={lockdown.paragraph}>Hai să vorbim și despre impactul lui. Acum este unul nesemnificativ, deoarece folosim un plan gratuit și nu avem niciun card asociat serviciului. Dar să presupunem că aș fi avut activată facturarea pay-as-you-go. Eu aș fi stat liniștit, considerând că aplicația este doar „între noi” și neimaginându-mi că unul dintre noi s-ar trezi să ne saboteze chiar pe noi. În acest caz, aș fi ajuns să plătesc pentru „demonstrația” ta.</Text>
+        <Text style={lockdown.paragraph}>Sincer, nu te pot înțelege. Mai mult, cred că nici tu nu ai înțeles că scopul acestui proiect este să îți ușureze ție munca.</Text>
+        <Text style={lockdown.conclusion}>Ești mare om!</Text>
+      </View>
+    </ScrollView>
+  </View>;
 }
 
 function AccessGate() {
@@ -72,4 +91,13 @@ const gate = StyleSheet.create({
   buttonDisabled: { opacity: .55 }, buttonText: { color: '#fff', fontWeight: '900', fontSize: 15 },
   error: { color: '#fecdd3', backgroundColor: '#4a1d29', borderRadius: 9, padding: 11 },
   blocked: { color: colors.danger, fontSize: 34, lineHeight: 42, fontWeight: '900', textAlign: 'center' }
+});
+
+const lockdown = StyleSheet.create({
+  screen: { flex: 1, minHeight: '100%', backgroundColor: '#080b10' },
+  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 48 },
+  card: { width: '100%', maxWidth: 820, alignSelf: 'center', paddingHorizontal: 28, paddingVertical: 32, borderRadius: 18, borderWidth: 1, borderColor: '#263241', backgroundColor: '#101722', gap: 18 },
+  name: { color: '#f8fafc', fontSize: 32, lineHeight: 39, fontWeight: '900' },
+  paragraph: { color: '#d1d5db', fontSize: 17, lineHeight: 28 },
+  conclusion: { marginTop: 8, color: '#f8fafc', fontSize: 25, lineHeight: 32, fontWeight: '900' }
 });
